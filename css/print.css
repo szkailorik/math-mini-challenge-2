@@ -1,0 +1,58 @@
+/* ============ A4 打印引擎 ============
+   打印时只显示 #print-root 中的 sheet。
+   高度用 296mm（略小于 A4 297mm）防止舍入溢出产生空白页。 */
+
+@page { size: A4; margin: 0; }
+
+@media print {
+  body.print-active > *:not(#print-root) { display: none !important; }
+  body.print-active { background: #fff !important; }
+
+  body.print-active #print-root { display: block !important; }
+
+  body.print-active #print-root .sheet {
+    display: block;
+    width: 210mm !important;
+    min-height: 0 !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    margin: 0 !important;
+    padding: 10mm 13mm 14mm !important;
+    page-break-after: always;
+    break-after: page;
+    position: relative;
+  }
+  /* 试卷页固定整页高度，保证页脚位置与分页稳定 */
+  body.print-active #print-root .exam-sheet,
+  body.print-active #print-root .practice-sheet {
+    height: 296mm !important;
+    overflow: hidden;
+  }
+  /* 答案页/讲解清单允许自然分页 */
+  body.print-active #print-root .ans-sheet,
+  body.print-active #print-root .explain-sheet {
+    height: auto !important;
+  }
+  body.print-active #print-root .sheet:last-child {
+    page-break-after: auto;
+    break-after: auto;
+  }
+
+  /* 打印配色一律纯黑白，节省墨且拟真 */
+  #print-root .sheet, #print-root .sheet * { color: #000 !important; }
+  #print-root .sec-head { background: #efefef !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  #print-root .ans-sec-title, #print-root .explain-group h3 { background: #f2f2f2 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  #print-root .sec-hint, #print-root .ans-hint, #print-root .e-h { color: #444 !important; }
+  #print-root .sheet-foot, #print-root .sheet-foot * { color: #888 !important; }
+
+  /* 题目不跨页拆分 */
+  #print-root .q, #print-root .ans-row, #print-root .explain-item, #print-root .ans-section { break-inside: avoid; page-break-inside: avoid; }
+
+  /* 打印态紧凑参数 */
+  #print-root .q-prompt { font-size: 13.5px; }
+  #print-root .q-list.oral { gap: 8px 16px; }
+  #print-root .q-list.lines { gap: 13px 26px; }
+  #print-root .q.lines .q-body { min-height: 46px; }
+  #print-root .q-space { height: 62px; }
+  #print-root .exam-title h1 { font-size: 20px; }
+}

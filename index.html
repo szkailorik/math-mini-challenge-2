@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>数学巅峰收束段 · Math Mini Challenge 2</title>
+<link rel="stylesheet" href="css/theme.css">
+<link rel="stylesheet" href="css/print.css">
+</head>
+<body>
+<div id="app">
+  <header class="app-head">
+    <div class="app-brand">
+      <span class="brand-mark">Σ</span>
+      <div>
+        <h1>数学巅峰收束段</h1>
+        <p>Math Mini Challenge 2 · 双人训练 · 纸笔闭环</p>
+      </div>
+    </div>
+    <div class="set-control">
+      <button id="set-prev" title="上一套">−</button>
+      <span class="set-display">第 <b id="set-number">1</b> 套</span>
+      <button id="set-next" title="下一套">＋</button>
+    </div>
+    <nav class="tabs">
+      <button class="tab-btn on" data-tab="paper">📄 试卷</button>
+      <button class="tab-btn" data-tab="grading">✅ 批阅</button>
+      <button class="tab-btn" data-tab="errorbook">📕 错题本</button>
+      <button class="tab-btn" data-tab="dashboard">📊 仪表盘</button>
+      <button class="tab-btn" data-tab="guide">👨‍👩‍👧 家长指引</button>
+    </nav>
+  </header>
+
+  <!-- 试卷 -->
+  <main id="panel-paper" class="tab-panel on">
+    <div class="toolbar">
+      <button class="tool-btn primary" data-print="print-papers">🖨 打印双人四页</button>
+      <button class="tool-btn" data-print="print-papers-kai">只印 KAI</button>
+      <button class="tool-btn" data-print="print-papers-lorik">只印 Lorik</button>
+      <button class="tool-btn answer" data-print="print-answers">🗝 打印答案批阅页</button>
+    </div>
+    <p class="note">同一套号永远生成同一份试卷（可随时补打）。换 <b>＋/−</b> 出新一套。屏幕预览即打印效果。</p>
+    <div id="paper-preview" class="preview"></div>
+  </main>
+
+  <!-- 批阅 -->
+  <main id="panel-grading" class="tab-panel">
+    <div class="toolbar">
+      <button class="student-btn on" data-student="kai">KAI</button>
+      <button class="student-btn" data-student="lorik">Lorik</button>
+      <span class="spacer"></span>
+      <button class="tool-btn" id="grade-all-right">重置为全对</button>
+      <button class="tool-btn primary" id="grade-submit">提交批阅</button>
+    </div>
+    <p class="note" id="grading-status"></p>
+    <div id="grading-list"></div>
+  </main>
+
+  <!-- 错题本 -->
+  <main id="panel-errorbook" class="tab-panel">
+    <div class="toolbar">
+      <button class="student-btn on" data-student="kai">KAI</button>
+      <button class="student-btn" data-student="lorik">Lorik</button>
+      <span class="spacer"></span>
+      <button class="tool-btn primary" data-print="print-eb-due">🖨 到期复练卷</button>
+      <button class="tool-btn" data-print="print-eb-priority">复错优先卷</button>
+      <button class="tool-btn" data-print="print-eb-all">全部错题卷</button>
+      <button class="tool-btn answer" data-print="print-explain">📋 讲解清单</button>
+      <button class="tool-btn primary" id="eb-submit">回写复练结果</button>
+    </div>
+    <div id="eb-stats" class="eb-stats"></div>
+    <div id="eb-list"></div>
+  </main>
+
+  <!-- 仪表盘 -->
+  <main id="panel-dashboard" class="tab-panel">
+    <div id="dash-cards" class="dash-grid"></div>
+    <div class="backup-bar">
+      <button class="tool-btn" id="backup-export">⬇ 导出全部数据</button>
+      <label class="tool-btn">⬆ 导入备份<input type="file" id="backup-import" accept=".json" hidden></label>
+      <span class="note">数据保存在本机浏览器。换设备用导出/导入迁移。</span>
+    </div>
+  </main>
+
+  <!-- 家长指引 -->
+  <main id="panel-guide" class="tab-panel">
+    <div class="guide">
+      <h2>每日 25 分钟闭环（家长流程）</h2>
+      <ol>
+        <li><b>打印</b>：「试卷」页 → 打印双人四页（每人 2 页 A4）。</li>
+        <li><b>限时训练</b>：第 1 页大题一限时 3 分钟；整卷建议 40 分钟内完成，营造考试感。</li>
+        <li><b>纸上批阅</b>：打印「答案批阅页」，逐题勾 ✓对 / △粗心 / ✗错 / ？需讲解。答案旁的一句提示就是给你的检查口令。</li>
+        <li><b>系统录入</b>：「批阅」页默认全对，只点非✓的题，提交后错题自动进错题本。</li>
+        <li><b>错题闭环</b>：每 2-3 天打一张「到期复练卷」（原题回炉 + 同类变式）；孩子做完勾 □已会/□又错/□需讲解，回系统「回写复练结果」。</li>
+        <li><b>周末讲解</b>：打印「讲解清单」，只讲复错和标记需讲解的题：先让孩子说思路 → 指出关键一步 → 当场做变式确认。</li>
+      </ol>
+      <h2>本阶段训练重点（为什么这样出卷）</h2>
+      <p>乘法、除法、分数运算（旧卷大题一、二、五）已经熟练，继续大量刷会浪费时间——它们降级为「核心保温」每天只抽检 6 题防回退。主训练火力转向四个真正决定初中衔接的能力：<b>复杂四则混合</b>（占 25 分的主战场：先看结构选方法）、<b>表征互通</b>（分数↔小数↔百分数↔比自由切换）、<b>单位率关系</b>（量纲统一与建模）、<b>方程与简算策略</b>（未知数位置与结构眼）。</p>
+      <h2>晋级判定</h2>
+      <p>「仪表盘」显示两人各训练域的近期正确率。达到：完成 ≥10 套、复杂混合正确率 ≥90%、无到期错题 —— 即可进入下一阶段（初中预备）。</p>
+    </div>
+  </main>
+</div>
+<div id="print-root"></div>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
