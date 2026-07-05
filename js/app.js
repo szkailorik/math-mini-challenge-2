@@ -11,6 +11,7 @@ import {
   recordPracticeResults, buildExplainList,
 } from './errorbook.js';
 import { studentSnapshot, renderDashboard } from './dashboard.js';
+import { getToken, setToken, syncNow, scheduleSync, lastSyncAt } from './sync.js';
 
 const $ = (sel) => document.querySelector(sel);
 const state = loadState();
@@ -57,6 +58,7 @@ function changeSet(delta) {
   currentSetCache = null;
   pendingGrades.kai = {}; pendingGrades.lorik = {};
   renderActive();
+  afterDataChange();
 }
 
 // ================= 批阅页 =================
@@ -91,6 +93,7 @@ function submitGrades() {
   alert(`${STUDENTS[gradingStudent].name} 第 ${state.currentSet} 套已录入：${items.length - wrong} 对 / ${wrong} 需关注。错题已进错题本。`);
   pendingGrades[gradingStudent] = {};
   renderGradingTab();
+  afterDataChange();
 }
 
 // ================= 错题本页 =================
@@ -139,13 +142,44 @@ function submitPractice() {
   pendingPractice[errorStudent] = {};
   renderErrorTab();
   alert(`已回写 ${results.length} 条复练结果`);
+  afterDataChange();
 }
 
 // ================= 仪表盘 =================
 function renderDashboardTab() {
   const snaps = STUDENT_IDS.map((id) => studentSnapshot(id, state.currentSet));
   $('#dash-cards').innerHTML = renderDashboard(snaps);
+  renderSyncStatus();
 }
+
+// ================= 跨设备同步 =================
+function renderSyncStatus(msg) {
+  const el = $('#sync-status');
+  if (!el) return;
+  if (msg) { el.textContent = msg; return; }
+  if (!getToken()) { el.textContent = '未配置：数据仅存本机'; return; }
+  const at = lastSyncAt();
+  el.textContent = at ? `已启用 · 上次同步 ${new Date(at).toLocaleString()}` : '已启用 · 尚未同步过';
+}
+
+async function runSync(trigger) {
+  if (!getToken()) {
+    if (trigger === 'manual') alert('先粘贴 GitHub 令牌并保存');
+    return;
+  }
+  renderSyncStatus('同步中…');
+  try {
+    await syncNow();
+    currentSetCache = null;
+    if (state.currentSet !== loadState().currentSet) Object.assign(state, loadState());
+    renderSyncStatus();
+    renderActive();
+  } catch (e) {
+    renderSyncStatus(`同步失败：${e.message}`);
+  }
+}
+
+const afterDataChange = () => scheduleSync(() => renderSyncStatus());
 
 // ================= 打印动作 =================
 const printActions = {
@@ -223,6 +257,21 @@ function bind() {
     a.click();
     URL.revokeObjectURL(a.href);
   });
+  $('#sync-save').addEventListener('click', () => {
+    const t = $('#sync-token').value.trim();
+    if (!t) { alert('先粘贴令牌'); return; }
+    setToken(t);
+    $('#sync-token').value = '';
+    runSync('manual');
+  });
+  $('#sync-now').addEventListener('click', () => runSync('manual'));
+  $('#sync-off').addEventListener('click', () => {
+    if (confirm('停用同步？本机数据保留，仅不再与云端同步。')) {
+      setToken('');
+      renderSyncStatus();
+    }
+  });
+
   $('#backup-import').addEventListener('change', async (ev) => {
     const file = ev.target.files[0];
     if (!file) return;
@@ -236,3 +285,5 @@ function bind() {
 
 bind();
 switchTab('paper');
+// 启动时自动拉取云端（已配置令牌的设备）
+if (getToken()) runSync('auto');
