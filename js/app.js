@@ -1,10 +1,14 @@
-import { STUDENTS, STUDENT_IDS, GRADES } from './config.js';
-import { loadState, saveState, loadProfile, exportAll, importAll } from './store.js';
-import { buildSet } from './paper.js';
+import { STUDENTS, STUDENT_IDS, GRADES, DOMAIN_LABELS } from './config.js';
+import { loadState, saveState, loadProfile, saveProfile, exportAll, importAll } from './store.js';
+import { buildSet, buildVariant } from './paper.js';
 import {
   renderPaperSheets, renderAnswerSheet, renderPracticeSheets,
   renderPracticeAnswers, renderExplainList, renderGradingPanel,
+  renderFocusSheet,
 } from './render.js';
+import {
+  previewLevels, previewFocus, ensureStamp, updateDifficulty,
+} from './adaptive.js';
 import { printHTML } from './print.js';
 import {
   recordGrades, getErrorEntries, errorBookStats, buildPracticePack,
@@ -21,12 +25,40 @@ let errorStudent = 'kai';
 let currentSetCache = null;
 const pendingGrades = { kai: {}, lorik: {} };
 const pendingPractice = { kai: {}, lorik: {} };
+const pendingFocus = { kai: {}, lorik: {} }; // 批阅页第七区标记：key = entryId|kind|序号
+
+function levelsProvider(studentId) {
+  return (setNumber) => previewLevels(studentId, setNumber);
+}
 
 function getSet() {
   if (!currentSetCache || currentSetCache.setNumber !== state.currentSet) {
-    currentSetCache = buildSet(state.currentSet);
+    currentSetCache = buildSet(state.currentSet, {
+      kai: levelsProvider('kai'),
+      lorik: levelsProvider('lorik'),
+    });
   }
   return currentSetCache;
+}
+
+// 大题七：把盖章/预览的回炉条目解析成可渲染的题目
+function focusQuestionsFor(studentId, setNumber) {
+  const focus = previewFocus(studentId, setNumber);
+  const profile = loadProfile(studentId);
+  const levels = previewLevels(studentId, setNumber);
+  const questions = [];
+  for (const item of focus.items) {
+    const e = profile.errorBook[item.entryId];
+    if (!e) continue; // 另一台设备的盖章可能先到，条目随同步补齐前先跳过
+    if (item.kind === 'original') {
+      questions.push({ entryId: item.entryId, kind: 'original', q: { prompt: e.prompt, answer: e.answer, hint: e.hint, domain: e.domain } });
+    } else {
+      const level = Math.min(levels[e.domain] || STUDENTS[studentId].level, 3);
+      const v = buildVariant(e.domain, e.tag, level, item.entryId, setNumber);
+      if (v) questions.push({ entryId: item.entryId, kind: 'variant', q: v });
+    }
+  }
+  return { band: focus.band, questions };
 }
 
 // ================= 导航 =================
@@ -48,8 +80,14 @@ function renderActive() {
 function renderPaperTab() {
   $('#set-number').textContent = state.currentSet;
   const set = getSet();
-  const preview = STUDENT_IDS.map((id) => renderPaperSheets(set.papers[id])).join('');
+  const preview = STUDENT_IDS.map((id) => studentPapersHTML(set.papers[id])).join('');
   $('#paper-preview').innerHTML = preview;
+}
+
+// 学员完整卷面 HTML：2 页正卷 +（有到期错题时）第 3 页回炉附加页
+function studentPapersHTML(paper) {
+  const focus = focusQuestionsFor(paper.studentId, paper.setNumber);
+  return renderPaperSheets(paper) + renderFocusSheet(paper, focus.questions, focus.band);
 }
 
 function changeSet(delta) {
@@ -57,6 +95,7 @@ function changeSet(delta) {
   saveState(state);
   currentSetCache = null;
   pendingGrades.kai = {}; pendingGrades.lorik = {};
+  pendingFocus.kai = {}; pendingFocus.lorik = {};
   renderActive();
   afterDataChange();
 }
@@ -72,10 +111,37 @@ function renderGradingTab() {
     : `第 ${state.currentSet} 套 · ${STUDENTS[gradingStudent].label} · 默认全对，只需点错题`;
   document.querySelectorAll('#panel-grading .student-btn').forEach((b) =>
     b.classList.toggle('on', b.dataset.student === gradingStudent));
-  $('#grading-list').innerHTML = renderGradingPanel(paper, pendingGrades[gradingStudent]);
+  $('#grading-list').innerHTML = renderGradingPanel(paper, pendingGrades[gradingStudent])
+    + renderFocusGrading();
+}
+
+// 批阅页第七区：回炉题用错题本三态（已会/又错/需讲解），默认已会
+function renderFocusGrading() {
+  const { questions } = focusQuestionsFor(gradingStudent, state.currentSet);
+  if (!questions.length) return '';
+  const rows = questions.map((fq, i) => {
+    const key = `${fq.entryId}|${fq.kind}|${i}`;
+    const cur = pendingFocus[gradingStudent][key] || 'mastered';
+    return `
+    <div class="grade-row" data-fkey="${key}">
+      <span class="ans-no">${i + 1}</span>
+      <div class="grade-q">
+        <div class="q-prompt">${fq.q.prompt}</div>
+        <div class="grade-ans">答案：${fq.q.answer} <em>${fq.q.hint || ''}</em>
+          <span class="p-kind">${fq.kind === 'original' ? '回炉' : '变式'} · ${DOMAIN_LABELS[fq.q.domain] || ''}</span></div>
+      </div>
+      <div class="grade-btns">
+        <button class="eb-btn ok ${cur === 'mastered' ? 'on' : ''}" data-fkey="${key}" data-outcome="mastered">已会</button>
+        <button class="eb-btn bad ${cur === 'wrong-again' ? 'on' : ''}" data-fkey="${key}" data-outcome="wrong-again">又错</button>
+        <button class="eb-btn mid ${cur === 'explain' ? 'on' : ''}" data-fkey="${key}" data-outcome="explain">需讲解</button>
+      </div>
+    </div>`;
+  }).join('');
+  return `<div class="grade-section focus-grading"><h3>七、错题回炉（附加）</h3>${rows}</div>`;
 }
 
 function submitGrades() {
+  ensureStamp(gradingStudent, state.currentSet); // 没打印直接批（线上做题）也要固化参数
   const set = getSet();
   const paper = set.papers[gradingStudent];
   const items = [];
@@ -89,9 +155,34 @@ function submitGrades() {
     }
   }
   recordGrades(gradingStudent, state.currentSet, items);
+
+  // 第七区回炉结果：按错题条目聚合（任一又错→又错 > 任一需讲解→需讲解 > 全对→已会）
+  const { questions: focusQs } = focusQuestionsFor(gradingStudent, state.currentSet);
+  if (focusQs.length) {
+    const byEntry = {};
+    focusQs.forEach((fq, i) => {
+      const mark = pendingFocus[gradingStudent][`${fq.entryId}|${fq.kind}|${i}`] || 'mastered';
+      const rank = { 'wrong-again': 2, explain: 1, mastered: 0 };
+      if (!byEntry[fq.entryId] || rank[mark] > rank[byEntry[fq.entryId]]) byEntry[fq.entryId] = mark;
+    });
+    recordPracticeResults(gradingStudent, state.currentSet,
+      Object.entries(byEntry).map(([entryId, outcome]) => ({ entryId, outcome })));
+  }
+
+  // 难度自适应：按近 3 套各域正确率微调
+  const profile = loadProfile(gradingStudent);
+  const deltas = updateDifficulty(gradingStudent, profile);
+  saveProfile(gradingStudent, profile);
+
   const wrong = items.filter((i) => i.grade !== 'right').length;
-  alert(`${STUDENTS[gradingStudent].name} 第 ${state.currentSet} 套已录入：${items.length - wrong} 对 / ${wrong} 需关注。错题已进错题本。`);
+  const deltaMsg = Object.entries(deltas)
+    .map(([d, v]) => `${DOMAIN_LABELS[d]}${v > 0 ? '↑' : '↓'}`).join(' ');
+  alert(`${STUDENTS[gradingStudent].name} 第 ${state.currentSet} 套已录入：${items.length - wrong} 对 / ${wrong} 需关注。`
+    + (focusQs.length ? `回炉 ${focusQs.length} 题已回写。` : '')
+    + (deltaMsg ? `\n难度调整：${deltaMsg}` : ''));
   pendingGrades[gradingStudent] = {};
+  pendingFocus[gradingStudent] = {};
+  currentSetCache = null;
   renderGradingTab();
   afterDataChange();
 }
@@ -182,17 +273,36 @@ async function runSync(trigger) {
 const afterDataChange = () => scheduleSync(() => renderSyncStatus());
 
 // ================= 打印动作 =================
+// 打印前盖章：难度与回炉选题固化到 state（同步到云端），保证补打与跨设备一致
+function stampAndInvalidate(ids) {
+  for (const id of ids) ensureStamp(id, state.currentSet);
+  currentSetCache = null;
+  afterDataChange();
+}
+
 const printActions = {
   'print-papers': () => {
+    stampAndInvalidate(STUDENT_IDS);
     const set = getSet();
-    const html = STUDENT_IDS.map((id) => renderPaperSheets(set.papers[id])).join('');
-    printHTML(html, `第${state.currentSet}套-双人四页`);
+    const html = STUDENT_IDS.map((id) => studentPapersHTML(set.papers[id])).join('');
+    printHTML(html, `第${state.currentSet}套-双人套卷`);
+    renderPaperTab();
   },
-  'print-papers-kai': () => printHTML(renderPaperSheets(getSet().papers.kai), `第${state.currentSet}套-KAI`),
-  'print-papers-lorik': () => printHTML(renderPaperSheets(getSet().papers.lorik), `第${state.currentSet}套-Lorik`),
+  'print-papers-kai': () => {
+    stampAndInvalidate(['kai']);
+    printHTML(studentPapersHTML(getSet().papers.kai), `第${state.currentSet}套-KAI`);
+  },
+  'print-papers-lorik': () => {
+    stampAndInvalidate(['lorik']);
+    printHTML(studentPapersHTML(getSet().papers.lorik), `第${state.currentSet}套-Lorik`);
+  },
   'print-answers': () => {
+    stampAndInvalidate(STUDENT_IDS);
     const set = getSet();
-    const html = STUDENT_IDS.map((id) => renderAnswerSheet(set.papers[id])).join('');
+    const html = STUDENT_IDS.map((id) => {
+      const focus = focusQuestionsFor(id, state.currentSet);
+      return renderAnswerSheet(set.papers[id], focus.questions);
+    }).join('');
     printHTML(html, `第${state.currentSet}套-答案`);
   },
   'print-eb-due': () => printPractice('due'),
@@ -228,6 +338,13 @@ function bind() {
     b.addEventListener('click', () => { errorStudent = b.dataset.student; renderErrorTab(); }));
 
   $('#grading-list').addEventListener('click', (ev) => {
+    const fbtn = ev.target.closest('.eb-btn[data-fkey]');
+    if (fbtn) {
+      pendingFocus[gradingStudent][fbtn.dataset.fkey] = fbtn.dataset.outcome;
+      const row = fbtn.closest('.grade-row');
+      row.querySelectorAll('.eb-btn').forEach((b) => b.classList.toggle('on', b === fbtn));
+      return;
+    }
     const btn = ev.target.closest('.grade-btn');
     if (!btn) return;
     pendingGrades[gradingStudent][btn.dataset.qid] = btn.dataset.grade;

@@ -39,6 +39,10 @@ export function loadState() {
 
 export function saveState(state) { write('state', state); }
 
+// 套卷盖章独立存储（不放 state 里：避免与内存中的 state 副本相互覆盖）
+export function loadStamps() { return read('stamps', {}) || {}; }
+export function saveStamps(stamps) { write('stamps', stamps); }
+
 // 全量导出/导入（换设备迁移用；无需服务器）
 export function exportAll() {
   const dump = { version: APP_VERSION, exportedAt: new Date().toISOString(), state: loadState() };

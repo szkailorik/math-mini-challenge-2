@@ -1,6 +1,7 @@
 import { loadProfile } from './store.js';
 import { DOMAIN_LABELS, PROMOTION, STUDENTS } from './config.js';
 import { errorBookStats } from './errorbook.js';
+import { getDifficulties, errorPressure, PRESSURE_LABELS } from './adaptive.js';
 
 // 每域近 N 套正确率 + 晋级判定
 export function studentSnapshot(studentId, currentSet) {
@@ -24,7 +25,12 @@ export function studentSnapshot(studentId, currentSet) {
   const eb = errorBookStats(studentId, currentSet);
   const ready = setsDone >= PROMOTION.minSets && mixedAcc >= PROMOTION.minAccuracy && eb.due === 0;
 
-  return { studentId, student: STUDENTS[studentId], setsDone, domainRows, mixedAcc, errorStats: eb, ready };
+  return {
+    studentId, student: STUDENTS[studentId], setsDone, domainRows, mixedAcc,
+    errorStats: eb, ready,
+    difficulties: getDifficulties(studentId),
+    pressure: errorPressure(studentId, currentSet),
+  };
 }
 
 export function renderDashboard(snapshots) {
@@ -32,11 +38,13 @@ export function renderDashboard(snapshots) {
     const bars = s.domainRows.map((r) => {
       const pct = r.acc === null ? 0 : Math.round(r.acc * 100);
       const cls = r.acc === null ? 'na' : r.acc >= 0.9 ? 'good' : r.acc >= 0.75 ? 'mid' : 'low';
+      const diff = s.difficulties[r.domain];
       return `
       <div class="dash-bar-row">
         <span class="db-label">${r.label}</span>
         <div class="db-track"><div class="db-fill ${cls}" style="width:${pct}%"></div></div>
         <span class="db-val">${r.acc === null ? '—' : pct + '%'}<i>${r.total ? ` /${r.total}题` : ''}</i></span>
+        <span class="db-diff" title="当前难度（自动调整）">L${diff.toFixed(2)}</span>
       </div>`;
     }).join('');
     const readyLabel = s.ready
@@ -49,6 +57,7 @@ export function renderDashboard(snapshots) {
         <span class="dash-sets">已完成 ${s.setsDone} 套</span>
       </div>
       <div class="dash-stats">
+        <span>回收档 <b>${PRESSURE_LABELS[s.pressure.band]}</b></span>
         <span>活跃错题 <b>${s.errorStats.active}</b></span>
         <span>到期复练 <b class="${s.errorStats.due ? 'warn' : ''}">${s.errorStats.due}</b></span>
         <span>复错优先 <b class="${s.errorStats.priority ? 'warn' : ''}">${s.errorStats.priority}</b></span>

@@ -15,13 +15,20 @@ export function questionId(q) {
   return `${q.tag}#${fnv1a(norm).toString(36)}`;
 }
 
-function rawSections(studentId, setNumber) {
+// levelsProvider: (setNumber) => {domain: level}。缺省用学员基础 level（兼容旧调用）。
+function defaultLevels(studentId) {
+  const level = STUDENTS[studentId].level;
+  return Object.fromEntries(SECTIONS.map((s) => [s.domain, level]));
+}
+
+function rawSections(studentId, setNumber, levels) {
   const student = STUDENTS[studentId];
   return SECTIONS.map((sec) => {
     const rng = makeRng(PROGRAM_ID, studentId, String(setNumber), sec.key);
+    const level = levels?.[sec.domain] ?? student.level;
     const questions = GENERATORS[sec.domain]
-      .generate(rng, student.level, sec.count)
-      .map((q) => ({ ...q, id: questionId(q), domain: sec.domain }));
+      .generate(rng, level, sec.count)
+      .map((q) => ({ ...q, id: questionId(q), domain: sec.domain, level }));
     return { ...sec, questions };
   });
 }
@@ -30,29 +37,32 @@ function rawSections(studentId, setNumber) {
 // 上一套的最终版依赖再上一套，因此自底向上构建并缓存（确定性不变）。
 const paperCache = new Map();
 
-export function buildStudentPaper(studentId, setNumber) {
-  const cacheKey = `${studentId}|${setNumber}`;
+export function buildStudentPaper(studentId, setNumber, levelsProvider) {
+  const provider = levelsProvider || (() => defaultLevels(studentId));
+  const keyOf = (s) => `${studentId}|${s}|${JSON.stringify(provider(s))}`;
+  const cacheKey = keyOf(setNumber);
   if (paperCache.has(cacheKey)) return paperCache.get(cacheKey);
   for (let s = 1; s < setNumber; s++) {
-    if (!paperCache.has(`${studentId}|${s}`)) {
-      paperCache.set(`${studentId}|${s}`, buildStudentPaperUncached(studentId, s));
+    if (!paperCache.has(keyOf(s))) {
+      paperCache.set(keyOf(s), buildStudentPaperUncached(studentId, s, provider));
     }
   }
-  const paper = buildStudentPaperUncached(studentId, setNumber);
+  const paper = buildStudentPaperUncached(studentId, setNumber, provider);
   paperCache.set(cacheKey, paper);
   return paper;
 }
 
-function buildStudentPaperUncached(studentId, setNumber) {
+function buildStudentPaperUncached(studentId, setNumber, provider) {
   const student = STUDENTS[studentId];
+  const levels = provider(setNumber);
   const prevIds = new Set(
     setNumber > 1
-      ? buildStudentPaper(studentId, setNumber - 1).sections.flatMap((s) => s.questions.map((q) => q.id))
+      ? buildStudentPaper(studentId, setNumber - 1, provider).sections.flatMap((s) => s.questions.map((q) => q.id))
       : []
   );
   const usedIds = new Set();
 
-  const sections = rawSections(studentId, setNumber).map((sec) => {
+  const sections = rawSections(studentId, setNumber, levels).map((sec) => {
     const questions = sec.questions.map((q, qi) => {
       if (!prevIds.has(q.id) && !usedIds.has(q.id)) {
         usedIds.add(q.id);
@@ -61,8 +71,9 @@ function buildStudentPaperUncached(studentId, setNumber) {
       // 撞题：用独立盐重生成，找同 tag 且不撞的替代题
       for (let attempt = 0; attempt < 6; attempt++) {
         const rng = makeRng('dedup', PROGRAM_ID, studentId, String(setNumber), sec.key, String(qi), String(attempt));
-        const batch = GENERATORS[sec.domain].generate(rng, student.level, sec.count)
-          .map((c) => ({ ...c, id: questionId(c), domain: sec.domain }));
+        const level = levels?.[sec.domain] ?? student.level;
+        const batch = GENERATORS[sec.domain].generate(rng, level, sec.count)
+          .map((c) => ({ ...c, id: questionId(c), domain: sec.domain, level }));
         const alt = batch.find((c) => c.tag === q.tag && !prevIds.has(c.id) && !usedIds.has(c.id))
           || batch.find((c) => !prevIds.has(c.id) && !usedIds.has(c.id));
         if (alt) { usedIds.add(alt.id); return alt; }
@@ -75,12 +86,12 @@ function buildStudentPaperUncached(studentId, setNumber) {
   return { studentId, student, setNumber, sections };
 }
 
-export function buildSet(setNumber) {
+export function buildSet(setNumber, providers = {}) {
   return {
     setNumber,
     papers: {
-      kai: buildStudentPaper('kai', setNumber),
-      lorik: buildStudentPaper('lorik', setNumber),
+      kai: buildStudentPaper('kai', setNumber, providers.kai),
+      lorik: buildStudentPaper('lorik', setNumber, providers.lorik),
     },
   };
 }

@@ -2,7 +2,7 @@
 // 与旧系统 GistSync 不同：不做"以谁为准"的冲突对比，而是逐字段合并——
 // 错题本按题目指纹索引、计数只增不减、历史按套号追加，天然可合并。
 import { STUDENT_IDS, STORE_PREFIX } from './config.js';
-import { loadProfile, saveProfile, loadState, saveState } from './store.js';
+import { loadProfile, saveProfile, loadState, saveState, loadStamps, saveStamps } from './store.js';
 
 const GIST_FILE = 'mmc2-data.json';
 const GIST_DESC = 'math-mini-challenge-2 训练数据（自动同步，勿手动编辑）';
@@ -62,21 +62,44 @@ export function mergeProfile(local, remote) {
 }
 
 function buildDump() {
-  const dump = { savedAt: new Date().toISOString(), state: loadState() };
+  const dump = { savedAt: new Date().toISOString(), state: loadState(), stamps: loadStamps() };
   for (const id of STUDENT_IDS) dump[`profile_${id}`] = loadProfile(id);
   return dump;
+}
+
+// 学员画像里的动态难度：各域取「更接近初始值修改次数多」无从判断，
+// 直接取较新历史一方的值（difficulty 随批改更新，历史更长者更准）。
+export function mergeDifficulty(local, remote) {
+  const ll = (local.history || []).length, rl = (remote.history || []).length;
+  return rl > ll ? (remote.difficulty || local.difficulty) : (local.difficulty || remote.difficulty);
+}
+
+// 套卷盖章合并：同一套先盖章者胜（保证两台设备打出同一份卷）
+export function mergeStamps(local = {}, remote = {}) {
+  const out = { ...local };
+  for (const [key, rs] of Object.entries(remote)) {
+    if (!out[key] || String(rs.at || '') < String(out[key].at || '')) out[key] = rs;
+  }
+  return out;
 }
 
 function applyMerged(remoteDump) {
   for (const id of STUDENT_IDS) {
     const remote = remoteDump[`profile_${id}`];
-    if (remote) saveProfile(id, mergeProfile(loadProfile(id), remote));
+    if (remote) {
+      const local = loadProfile(id);
+      const merged = mergeProfile(local, remote);
+      merged.difficulty = mergeDifficulty(local, remote);
+      saveProfile(id, merged);
+    }
   }
   const state = loadState();
   if (remoteDump.state?.currentSet > state.currentSet) {
     state.currentSet = remoteDump.state.currentSet;
     saveState(state);
   }
+  // 兼容旧字段位置 remoteDump.state.stamps
+  saveStamps(mergeStamps(loadStamps(), remoteDump.stamps || remoteDump.state?.stamps));
 }
 
 // ============ Gist 读写 ============

@@ -59,6 +59,51 @@ for (const sec of SECTIONS) {
 }
 console.log('  变式生成通过');
 
+// 动态难度：levelsProvider 路径（域级混合 level）
+{
+  const provider = (set) => ({ oral: 2, keep: 2, bridge: set % 2 ? 2 : 3, mixed: 3, unit: 2, strategy: 3 });
+  for (let set = 1; set <= 20; set++) {
+    const paper = buildStudentPaper('lorik', set, provider);
+    for (const sec of paper.sections) {
+      if (sec.questions.length !== sec.count) fail(`动态难度 套${set} ${sec.title}: 题量不对`);
+      for (const q of sec.questions) {
+        for (const bad of BAD_STRINGS) {
+          if ((q.prompt + q.answer).includes(bad)) fail(`动态难度 套${set} [${q.tag}]: 含 "${bad}"`);
+        }
+      }
+    }
+  }
+  const a = buildStudentPaper('lorik', 3, provider);
+  const b = buildStudentPaper('lorik', 3, provider);
+  if (JSON.stringify(a.sections.map((s) => s.questions.map((q) => q.prompt)))
+    !== JSON.stringify(b.sections.map((s) => s.questions.map((q) => q.prompt)))) {
+    fail('动态难度：同 provider 同套非确定性');
+  }
+  console.log('  动态难度路径通过');
+}
+
+// level 4（mixed/strategy 巅峰难度）
+{
+  const { GENERATORS } = await import('../js/paper.js');
+  for (const dom of ['mixed', 'strategy']) {
+    for (let i = 0; i < 40; i++) {
+      const { makeRng } = await import('../js/rng.js');
+      const qs = GENERATORS[dom].generate(makeRng('l4-test', dom, String(i)), 4, 5);
+      if (qs.length !== 5) fail(`L4 ${dom} seed${i}: 题量 ${qs.length}`);
+      const prompts = new Set();
+      for (const q of qs) {
+        for (const bad of BAD_STRINGS) {
+          if ((q.prompt + q.answer).includes(bad)) fail(`L4 ${dom} seed${i} [${q.tag}]: 含 "${bad}" → ${q.prompt.slice(0, 60)}`);
+        }
+        if (!q.answer?.trim()) fail(`L4 ${dom} seed${i} [${q.tag}]: 空答案`);
+        if (prompts.has(q.prompt)) fail(`L4 ${dom} seed${i}: 同卷重复`);
+        prompts.add(q.prompt);
+      }
+    }
+  }
+  console.log('  level 4 生成通过');
+}
+
 // questionId 稳定性
 {
   const p1 = buildStudentPaper('kai', 3);

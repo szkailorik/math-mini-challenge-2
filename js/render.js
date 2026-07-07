@@ -87,7 +87,7 @@ export function renderPaperSheets(paper) {
 
 // ================= 答案页（家长批阅用，紧凑双栏） =================
 
-export function renderAnswerSheet(paper) {
+export function renderAnswerSheet(paper, focusQuestions = []) {
   let idx = 0;
   const secs = paper.sections.map((sec) => {
     const rows = sec.questions.map((q, i) => `
@@ -110,8 +110,64 @@ export function renderAnswerSheet(paper) {
       <h2>参考答案与批阅页 · ${paper.student.label}</h2>
       <p>第 ${paper.setNumber} 套 · 批阅标记：✓ 对 / △ 粗心 / ✗ 错 / ？需讲解 —— 批完回到系统「批阅」页录入</p>
     </header>
-    <div class="ans-columns">${secs}</div>
+    <div class="ans-columns">${secs}${renderFocusAnswers(focusQuestions)}</div>
   </article>`;
+}
+
+// ================= 大题七 · 错题回炉（日常卷附加页） =================
+
+const BAND_LABELS = { standard: '标准回收', intensive: '强化回收' };
+
+export function renderFocusSheet(paper, focusQuestions, band) {
+  if (!focusQuestions.length) return '';
+  const qs = focusQuestions.map((fq, i) => `
+    <div class="q lines practice-q ${fq.kind}">
+      <span class="q-no">${i + 1}.</span>
+      <div class="q-body">
+        <div class="q-prompt">${fq.q.prompt}</div>
+        <div class="practice-meta">
+          <span class="p-kind">${fq.kind === 'original' ? '回炉' : '变式'}</span>
+          <span class="p-domain">${DOMAIN_LABELS[fq.q.domain] || fq.q.domain}</span>
+          <span class="p-mark">□已会 □又错 □需讲解</span>
+        </div>
+      </div>
+    </div>`).join('');
+  return `
+  <article class="sheet exam-sheet focus-sheet" data-student="${paper.studentId}" data-page="3">
+    <header class="exam-head slim">
+      <span class="slim-name">${paper.student.name} · 第 ${paper.setNumber} 套</span>
+      <span class="slim-page">附加页 · 错题回炉（${BAND_LABELS[band] || '回收'} · 不计分）</span>
+    </header>
+    <section class="exam-section">
+      <div class="sec-head">
+        <span class="sec-no">七、错题回炉</span>
+        <span class="sec-en">Error Recycle</span>
+        <span class="sec-points">共 ${focusQuestions.length} 题 · 附加不计分</span>
+      </div>
+      <p class="sec-hint">到期错题自动排入：回炉查记忆，变式查真会。做完勾选 □，批阅时一并录入</p>
+      <div class="q-list lines">${qs}</div>
+    </section>
+    <footer class="sheet-foot">
+      <span>math-mini-challenge · 错题闭环</span>
+      <span>${paper.student.name} · 第 ${paper.setNumber} 套 · 附加页</span>
+    </footer>
+  </article>`;
+}
+
+export function renderFocusAnswers(focusQuestions) {
+  if (!focusQuestions.length) return '';
+  const rows = focusQuestions.map((fq, i) => `
+    <div class="ans-row">
+      <span class="ans-no">${i + 1}</span>
+      <span class="ans-val">${fq.q.answer}</span>
+      <span class="ans-hint">${fq.q.hint || ''}</span>
+      <span class="ans-mark">□会 □错 □讲</span>
+    </div>`).join('');
+  return `
+    <div class="ans-section">
+      <div class="ans-sec-title">七、错题回炉 <em>（附加不计分）</em></div>
+      ${rows}
+    </div>`;
 }
 
 // ================= 错题复练卷 =================
