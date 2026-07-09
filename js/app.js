@@ -20,8 +20,14 @@ import {
 } from './errorbook.js';
 import { studentSnapshot, renderDashboard } from './dashboard.js';
 import { getToken, setToken, syncNow, scheduleSync, lastSyncAt } from './sync.js';
+import { migrateProfile } from './migrate.js';
 
 const $ = (sel) => document.querySelector(sel);
+
+// 启动迁移：对本地两个 profile 各跑一次幂等 v2→v3 迁移（补 skill/mastery），
+// 在任何同步/出卷之前，保证本地形状已是 v3（合并时不丢新字段）。
+for (const id of STUDENT_IDS) saveProfile(id, migrateProfile(loadProfile(id)));
+
 const state = loadState();
 if (state.mode !== 'daily' && state.mode !== 'realistic') state.mode = 'daily';
 let activeTab = 'paper';

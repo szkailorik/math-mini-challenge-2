@@ -3,6 +3,7 @@
 // 错题本按题目指纹索引、计数只增不减、历史按套号追加，天然可合并。
 import { STUDENT_IDS, STORE_PREFIX } from './config.js';
 import { loadProfile, saveProfile, loadState, saveState, loadStamps, saveStamps } from './store.js';
+import { migrateDump } from './migrate.js';
 
 const GIST_FILE = 'mmc2-data.json';
 const GIST_DESC = 'math-mini-challenge-2 训练数据（自动同步，勿手动编辑）';
@@ -40,6 +41,9 @@ function mergeEntry(a, b) {
   base.needsExplainCount = Math.max(a.needsExplainCount || 0, b.needsExplainCount || 0);
   base.firstSet = Math.min(a.firstSet ?? Infinity, b.firstSet ?? Infinity);
   base.firstDate = [a.firstDate, b.firstDate].filter(Boolean).sort()[0] || base.firstDate;
+  // v3 skill 字段：newer 一方缺失时从另一方补回，避免合并丢失技能归类
+  const skill = base.skill ?? a.skill ?? b.skill;
+  if (skill != null) base.skill = skill;
   return base;
 }
 
@@ -62,7 +66,7 @@ export function mergeProfile(local, remote) {
 }
 
 function buildDump() {
-  const dump = { savedAt: new Date().toISOString(), state: loadState(), stamps: loadStamps() };
+  const dump = { schemaVersion: 3, savedAt: new Date().toISOString(), state: loadState(), stamps: loadStamps() };
   for (const id of STUDENT_IDS) dump[`profile_${id}`] = loadProfile(id);
   return dump;
 }
@@ -136,7 +140,8 @@ export async function syncNow() {
       try {
         // 大文件 gist API 会截断，需从 raw_url 取全文
         const content = file.truncated ? await (await fetch(file.raw_url)).text() : file.content;
-        applyMerged(JSON.parse(content));
+        // 拉取到的远端可能是 v2 或无版本 dump：先过 migrateDump 再合并
+        applyMerged(migrateDump(JSON.parse(content)));
       } catch { /* 云端内容损坏：以本地为准直接覆盖 */ }
     }
   } else if (res.status === 404) {

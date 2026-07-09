@@ -6,13 +6,14 @@ import { generateVariant } from './qmodel.js';
 import { buildVariant } from '../paper.js';
 import { makeRng, fnv1a } from '../rng.js';
 import { STUDENTS } from '../config.js';
+import { TAG_TO_SKILL } from '../migrate.js';
 
 const DEFAULT_MAX = 12;
 const RETRY_LIMIT = 6;
 
-// TAG 前缀 → skill 映射（v2 旧条目 skill 预设用；无映射时退回 domain 匹配）。
-// 现阶段旧题面无 skill 字段，映射保留为空，按 domain 匹配即可。
-const TAG_SKILL_MAP = {};
+// v2 tag → skill 映射（旧条目未迁移时的 skill 预设匹配用；无映射时退回 domain 匹配）。
+// 真表来自 migrate.js（迁移后条目已带 skill 字段，此表仅兜底未迁移条目）。
+const TAG_SKILL_MAP = TAG_TO_SKILL;
 
 // 变式指纹：题面去 HTML 去空白后 fnv1a（与 questionId 同口径），转 36 进制字符串。
 export function fingerprint(prompt) {
