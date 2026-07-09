@@ -174,6 +174,11 @@ function prepareSprintSubmission() {
   const autoCorrect = 40 - wrongCount;
   const correctRaw = correctInput?.value;
   const correct = correctRaw !== undefined && correctRaw !== '' ? Number(correctRaw) : autoCorrect;
+  if (!Number.isFinite(correct) || correct < 0 || correct > 40) {
+    alert('对题数需在 0-40 之间');
+    correctInput?.focus();
+    return null;
+  }
   const sprint = buildSprintPage(gradingStudent, state.currentSet);
   const results = sprint.items.map((it, i) => ({ skill: it.skill, correct: !pending.wrong[i] }));
   const skills = [...new Set(sprint.items.map((it) => it.skill))]; // 本页去重技能列表（第4参硬性契约）
