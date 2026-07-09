@@ -91,6 +91,17 @@ const DFB_DIRS = [
 function dfbReprs(fr) {
   return { frac: fracHTML(fr), dec: decimalHTML(fr), pct: percentHTML(fr) };
 }
+// 分母含 8 的基准（12.5%/37.5%/62.5%/87.5%）走"百分数→最简分数"方向时，
+// "先写成分母 100 的分数" 这一步不可行（分子非整数），需要单独给出可行提示。
+function isDecimalPct(fr) {
+  return !fr.mul(F(100)).isInt();
+}
+function dfbHint(dir, fr) {
+  if (dir.from === 'pct' && dir.to === 'frac' && isDecimalPct(fr)) {
+    return '百分数带小数时：先化成小数，再化最简分数';
+  }
+  return dir.hint;
+}
 
 const decFracBaseCore = defineQModel({
   id: 'dec_frac_base.core',
@@ -103,7 +114,7 @@ const decFracBaseCore = defineQModel({
     const fr = F(n, d);
     const dir = rng.pick(DFB_DIRS);
     const R = dfbReprs(fr);
-    return { prompt: `${R[dir.from]} =`, answer: R[dir.to], hint: dir.hint, work: 'inline' };
+    return { prompt: `${R[dir.from]} =`, answer: R[dir.to], hint: dfbHint(dir, fr), work: 'inline' };
   },
   variant(rng, bugId, level) {
     if (level === 'L3') {
@@ -112,7 +123,7 @@ const decFracBaseCore = defineQModel({
       const dir = rng.pick(DFB_DIRS);
       const R = dfbReprs(fr);
       // 反向填空：给出目标形式，倒推出发形式，考的是"互化"而不是单向记忆
-      return { prompt: `( ) = ${R[dir.to]}`, answer: R[dir.from], hint: dir.hint, work: 'inline' };
+      return { prompt: `( ) = ${R[dir.to]}`, answer: R[dir.from], hint: dfbHint(dir, fr), work: 'inline' };
     }
     return this.generate(rng);
   },
@@ -184,7 +195,7 @@ const squareBaseCore = defineQModel({
 // "两侧整百/整千的中点" ≥ 单位的 8%，避免中点歧义（50 次内找不到就放宽接受当前组合，
 // 概率极低，仅作为死循环兜底）。
 function genEstimate(rng) {
-  let a, b, p, unit, floor, mid, dist, tries = 0;
+  let a, b, p, unit, floor, mid, dist, nearest, tries = 0;
   do {
     a = rng.int(18, 98);
     b = rng.int(19, 52);
@@ -193,9 +204,11 @@ function genEstimate(rng) {
     floor = Math.floor(p / unit) * unit;
     mid = floor + unit / 2;
     dist = Math.abs(p - mid);
+    nearest = p - floor < unit / 2 ? floor : floor + unit;
     tries++;
-  } while (dist / unit < 0.08 && tries < 50);
-  const nearest = p - floor < unit / 2 ? floor : floor + unit;
+    // nearest === unit * 10 意味着四舍五入结果跨了一个数量级（如问"几百"但答案是 1000），
+    // 必须排除这类组合，否则"几百/几千"的问法与就近取整答案会互相矛盾。
+  } while ((dist / unit < 0.08 || nearest === unit * 10) && tries < 50);
   return { a, b, p, unit, nearest };
 }
 

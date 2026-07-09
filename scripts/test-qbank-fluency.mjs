@@ -82,5 +82,28 @@ for (let i = 0; i < 100; i++) {
   ok(Math.abs(ans - p) <= unit, `estimate_flash#${i} 就近取整: ${p}->${q.answer}`);
 }
 
+// estimate_flash：问"几百"时答案不得跨界到 ≥1000，问"几千"时答案不得<1000（审查发现1）
+for (let i = 0; i < 2000; i++) {
+  const q = generateFromSkill(makeRng('qeb', String(i)), 'estimate_flash', {});
+  const ans = Number(q.answer);
+  if (q.prompt.includes('几百')) ok(ans < 1000, `estimate_flash#${i} 问几百答案<1000: ${q.prompt} -> ${q.answer}`);
+  if (q.prompt.includes('几千')) ok(ans >= 1000, `estimate_flash#${i} 问几千答案>=1000: ${q.prompt} -> ${q.answer}`);
+}
+
+// dec_frac_base：百分数带小数（如 62.5%）走"百分数→最简分数"方向时，hint 不应给出不可行的
+// "先写成分母 100 的分数" 步骤（分子非整数）（审查发现2）
+for (let i = 0; i < 500; i++) {
+  const seed = String(i);
+  const q1 = generateFromSkill(makeRng('qdf', seed), 'dec_frac_base', {});
+  const v3 = generateVariant(makeRng('qdfv', seed), q1.qmodel, { level: 'L3' });
+  for (const q of [q1, v3]) {
+    const isFracAnswer = /fn">/.test(q.answer);
+    const hasDecimalPct = /\.\d+%/.test(q.prompt);
+    if (isFracAnswer && hasDecimalPct) {
+      ok(!q.hint.includes('分母 100'), `dec_frac_base#${i} 小数百分数化最简分数 hint 不含"分母 100": ${q.prompt} hint="${q.hint}"`);
+    }
+  }
+}
+
 if (fails) process.exit(1);
 console.log('✅ 小数分数基准题模通过');
