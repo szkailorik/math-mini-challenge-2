@@ -1,14 +1,16 @@
 import { STUDENTS, STUDENT_IDS, GRADES, DOMAIN_LABELS } from './config.js';
-import { loadState, saveState, loadProfile, saveProfile, exportAll, importAll } from './store.js';
+import { loadState, saveState, loadProfile, saveProfile, exportAll, importAll, saveSprintScore } from './store.js';
 import { buildSet, buildVariant } from './paper.js';
 import {
   renderPaperSheets, renderAnswerSheet, renderPracticeSheets,
   renderPracticeAnswers, renderExplainList, renderGradingPanel,
-  renderFocusSheet,
+  renderFocusSheet, renderSprintSheet, renderSprintGrading,
 } from './render.js';
 import {
   previewLevels, previewFocus, ensureStamp, updateDifficulty,
 } from './adaptive.js';
+import { buildSprintPage } from './engine/composer.js';
+import { recordSkillResults, recordSprintTiming, refreshStates } from './engine/mastery.js';
 import { printHTML } from './print.js';
 import {
   recordGrades, getErrorEntries, errorBookStats, buildPracticePack,
@@ -19,6 +21,7 @@ import { getToken, setToken, syncNow, scheduleSync, lastSyncAt } from './sync.js
 
 const $ = (sel) => document.querySelector(sel);
 const state = loadState();
+if (state.mode !== 'daily' && state.mode !== 'realistic') state.mode = 'daily';
 let activeTab = 'paper';
 let gradingStudent = 'kai';
 let errorStudent = 'kai';
@@ -26,6 +29,8 @@ let currentSetCache = null;
 const pendingGrades = { kai: {}, lorik: {} };
 const pendingPractice = { kai: {}, lorik: {} };
 const pendingFocus = { kai: {}, lorik: {} }; // 批阅页第七区标记：key = entryId|kind|序号
+const blankSprint = () => ({ wrong: {}, seconds: '', correct: null });
+const pendingSprint = { kai: blankSprint(), lorik: blankSprint() }; // 批阅页口算区：wrong=标错索引集合
 
 function levelsProvider(studentId) {
   return (setNumber) => previewLevels(studentId, setNumber);
@@ -70,10 +75,16 @@ function switchTab(tab) {
 }
 
 function renderActive() {
+  updateModeButtons();
   if (activeTab === 'paper') renderPaperTab();
   else if (activeTab === 'grading') renderGradingTab();
   else if (activeTab === 'errorbook') renderErrorTab();
   else if (activeTab === 'dashboard') renderDashboardTab();
+}
+
+function updateModeButtons() {
+  document.querySelectorAll('.mode-btn').forEach((b) =>
+    b.classList.toggle('on', b.dataset.mode === state.mode));
 }
 
 // ================= 试卷页 =================
@@ -84,10 +95,13 @@ function renderPaperTab() {
   $('#paper-preview').innerHTML = preview;
 }
 
-// 学员完整卷面 HTML：2 页正卷 +（有到期错题时）第 3 页回炉附加页
+// 学员完整卷面 HTML：（日课模式）口算计时页 + 2 页正卷 +（有到期错题时）第 3 页回炉附加页
 function studentPapersHTML(paper) {
   const focus = focusQuestionsFor(paper.studentId, paper.setNumber);
-  return renderPaperSheets(paper) + renderFocusSheet(paper, focus.questions, focus.band);
+  const sprintHTML = state.mode === 'daily'
+    ? renderSprintSheet(paper, buildSprintPage(paper.studentId, paper.setNumber))
+    : '';
+  return sprintHTML + renderPaperSheets(paper) + renderFocusSheet(paper, focus.questions, focus.band);
 }
 
 function changeSet(delta) {
@@ -96,6 +110,7 @@ function changeSet(delta) {
   currentSetCache = null;
   pendingGrades.kai = {}; pendingGrades.lorik = {};
   pendingFocus.kai = {}; pendingFocus.lorik = {};
+  pendingSprint.kai = blankSprint(); pendingSprint.lorik = blankSprint();
   renderActive();
   afterDataChange();
 }
@@ -111,7 +126,10 @@ function renderGradingTab() {
     : `第 ${state.currentSet} 套 · ${STUDENTS[gradingStudent].label} · 默认全对，只需点错题`;
   document.querySelectorAll('#panel-grading .student-btn').forEach((b) =>
     b.classList.toggle('on', b.dataset.student === gradingStudent));
-  $('#grading-list').innerHTML = renderGradingPanel(paper, pendingGrades[gradingStudent])
+  const sprintHTML = state.mode === 'daily'
+    ? renderSprintGrading(buildSprintPage(gradingStudent, state.currentSet), pendingSprint[gradingStudent])
+    : '';
+  $('#grading-list').innerHTML = sprintHTML + renderGradingPanel(paper, pendingGrades[gradingStudent])
     + renderFocusGrading();
 }
 
@@ -140,8 +158,35 @@ function renderFocusGrading() {
   return `<div class="grade-section focus-grading"><h3>七、错题回炉（附加）</h3>${rows}</div>`;
 }
 
+// 口算区提交前校验并打包：用时秒数必填；对题数默认=40-标错数，可手改。
+// 返回 null 且已 alert 提示时，调用方应中止整个批阅提交（避免部分录入）。
+function prepareSprintSubmission() {
+  const secInput = $('#sprint-seconds');
+  const correctInput = $('#sprint-correct');
+  const seconds = Number(secInput?.value);
+  if (!secInput || !seconds || seconds <= 0) {
+    alert('请先填写口算区「用时（秒）」再提交');
+    secInput?.focus();
+    return null;
+  }
+  const pending = pendingSprint[gradingStudent];
+  const wrongCount = Object.values(pending.wrong || {}).filter(Boolean).length;
+  const autoCorrect = 40 - wrongCount;
+  const correctRaw = correctInput?.value;
+  const correct = correctRaw !== undefined && correctRaw !== '' ? Number(correctRaw) : autoCorrect;
+  const sprint = buildSprintPage(gradingStudent, state.currentSet);
+  const results = sprint.items.map((it, i) => ({ skill: it.skill, correct: !pending.wrong[i] }));
+  const skills = [...new Set(sprint.items.map((it) => it.skill))]; // 本页去重技能列表（第4参硬性契约）
+  return { results, skills, timing: { seconds, total: 40, correct } };
+}
+
 function submitGrades() {
   ensureStamp(gradingStudent, state.currentSet); // 没打印直接批（线上做题）也要固化参数
+  let sprintSubmission = null;
+  if (state.mode === 'daily') {
+    sprintSubmission = prepareSprintSubmission();
+    if (!sprintSubmission) return; // 用时未填：中止整个提交，避免主题区/口算区数据不一致
+  }
   const set = getSet();
   const paper = set.papers[gradingStudent];
   const items = [];
@@ -174,11 +219,26 @@ function submitGrades() {
   const deltas = updateDifficulty(gradingStudent, profile);
   saveProfile(gradingStudent, profile);
 
+  // 口算区：走 mastery 契约链（与主题区 recordGrades 完全独立）
+  let sprintMsg = '';
+  if (sprintSubmission) {
+    recordSkillResults(gradingStudent, state.currentSet, sprintSubmission.results);
+    recordSprintTiming(gradingStudent, state.currentSet, sprintSubmission.timing, sprintSubmission.skills);
+    refreshStates(gradingStudent);
+    saveSprintScore(gradingStudent, {
+      set: state.currentSet, seconds: sprintSubmission.timing.seconds,
+      correct: sprintSubmission.timing.correct, total: 40,
+    });
+    sprintMsg = `口算 ${sprintSubmission.timing.correct}/40 · 用时 ${sprintSubmission.timing.seconds} 秒已录入。`;
+    pendingSprint[gradingStudent] = blankSprint();
+  }
+
   const wrong = items.filter((i) => i.grade !== 'right').length;
   const deltaMsg = Object.entries(deltas)
     .map(([d, v]) => `${DOMAIN_LABELS[d]}${v > 0 ? '↑' : '↓'}`).join(' ');
   alert(`${STUDENTS[gradingStudent].name} 第 ${state.currentSet} 套已录入：${items.length - wrong} 对 / ${wrong} 需关注。`
     + (focusQs.length ? `回炉 ${focusQs.length} 题已回写。` : '')
+    + sprintMsg
     + (deltaMsg ? `\n难度调整：${deltaMsg}` : ''));
   pendingGrades[gradingStudent] = {};
   pendingFocus[gradingStudent] = {};
@@ -301,7 +361,8 @@ const printActions = {
     const set = getSet();
     const html = STUDENT_IDS.map((id) => {
       const focus = focusQuestionsFor(id, state.currentSet);
-      return renderAnswerSheet(set.papers[id], focus.questions);
+      const sprint = state.mode === 'daily' ? buildSprintPage(id, state.currentSet) : null;
+      return renderAnswerSheet(set.papers[id], focus.questions, sprint);
     }).join('');
     printHTML(html, `第${state.currentSet}套-答案`);
   },
@@ -329,6 +390,15 @@ function bind() {
   $('#set-prev').addEventListener('click', () => changeSet(-1));
   $('#set-next').addEventListener('click', () => changeSet(1));
 
+  document.querySelectorAll('.mode-btn').forEach((b) =>
+    b.addEventListener('click', () => {
+      if (state.mode === b.dataset.mode) return;
+      state.mode = b.dataset.mode;
+      saveState(state);
+      currentSetCache = null;
+      renderActive();
+    }));
+
   document.querySelectorAll('[data-print]').forEach((b) =>
     b.addEventListener('click', () => printActions[b.dataset.print]?.()));
 
@@ -338,6 +408,14 @@ function bind() {
     b.addEventListener('click', () => { errorStudent = b.dataset.student; renderErrorTab(); }));
 
   $('#grading-list').addEventListener('click', (ev) => {
+    const sc = ev.target.closest('.sprint-cell');
+    if (sc) {
+      const idx = Number(sc.dataset.sidx);
+      const wrong = pendingSprint[gradingStudent].wrong;
+      if (wrong[idx]) delete wrong[idx]; else wrong[idx] = true;
+      renderGradingTab(); // 重渲染以刷新「标错/自动对题数」提示
+      return;
+    }
     const fbtn = ev.target.closest('.eb-btn[data-fkey]');
     if (fbtn) {
       pendingFocus[gradingStudent][fbtn.dataset.fkey] = fbtn.dataset.outcome;
@@ -351,9 +429,17 @@ function bind() {
     const row = btn.closest('.grade-row');
     row.querySelectorAll('.grade-btn').forEach((b) => b.classList.toggle('on', b === btn));
   });
+  // 口算区用时/对题数输入：随打随存，避免标错题触发的重渲染丢失已填值
+  $('#grading-list').addEventListener('input', (ev) => {
+    if (ev.target.id === 'sprint-seconds') pendingSprint[gradingStudent].seconds = ev.target.value;
+    else if (ev.target.id === 'sprint-correct') {
+      pendingSprint[gradingStudent].correct = ev.target.value === '' ? null : ev.target.value;
+    }
+  });
   $('#grade-submit').addEventListener('click', submitGrades);
   $('#grade-all-right').addEventListener('click', () => {
     pendingGrades[gradingStudent] = {};
+    if (state.mode === 'daily') pendingSprint[gradingStudent] = blankSprint();
     renderGradingTab();
   });
 

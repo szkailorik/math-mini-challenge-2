@@ -317,6 +317,55 @@ body {
 .sync-row input:focus { outline: none; border-color: var(--indigo); }
 #sync-status { margin: 4px 0 0; }
 
+/* ============ 模式切换（日课/拟真） ============ */
+.mode-switch { display: flex; gap: 6px; }
+.mode-btn.on { background: var(--indigo); border-color: var(--indigo); color: #fff; }
+
+/* ============ 口算计时页（打印/预览） ============ */
+.sprint-head .exam-title-row { align-items: center; }
+.sprint-last {
+  border: 1.5px solid var(--ink); border-radius: 8px;
+  padding: 4px 10px; font-size: 11px; text-align: center; white-space: nowrap;
+}
+.sprint-last.empty { color: var(--ink-soft); border-style: dashed; }
+.sprint-fields i.wide { width: 60px; }
+.sprint-grid {
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  gap: 5px 14px; margin-top: 10px;
+}
+.sprint-item {
+  display: flex; align-items: baseline; gap: 4px;
+  font-size: 14px; padding: 3px 0; border-bottom: .8px dotted var(--line);
+}
+.sp-no { font-weight: 700; color: var(--indigo); min-width: 18px; }
+.sp-prompt { flex: 0 0 auto; white-space: nowrap; }
+.sp-blank { flex: 1; border-bottom: 1px solid var(--ink); min-width: 26px; margin-left: 2px; }
+
+/* —— 口算区答案（答案批阅页附加） —— */
+.sprint-ans-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0 10px; }
+.sprint-ans-row { font-size: 11px; padding: 1.5px 0; }
+
+/* ============ 批阅页 · 口算区 ============ */
+.sprint-grading h3 { color: var(--indigo); }
+.sprint-grade-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px 10px; }
+.sprint-cell {
+  display: flex; align-items: center; gap: 5px;
+  border: 1.4px solid var(--line); border-radius: 6px;
+  background: #fff; padding: 4px 6px; font-size: 11.5px; cursor: pointer; text-align: left;
+}
+.sprint-cell .sc-no { font-weight: 700; color: var(--ink-soft); min-width: 16px; }
+.sprint-cell .sc-prompt { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sprint-cell .sc-mark { font-weight: 700; color: var(--green); }
+.sprint-cell.wrong { border-color: var(--red); background: #fef2f2; }
+.sprint-cell.wrong .sc-mark { color: var(--red); }
+.sprint-timing-row { display: flex; gap: 16px; align-items: center; margin-top: 12px; font-size: 13px; flex-wrap: wrap; }
+.sprint-timing-row label { display: flex; align-items: center; gap: 6px; }
+.sprint-timing-row input {
+  width: 70px; border: 1.5px solid var(--line); border-radius: 7px; padding: 5px 8px; font-size: 13px;
+}
+.sprint-timing-row input:focus { outline: none; border-color: var(--indigo); }
+.sprint-auto-hint { color: var(--ink-soft); font-size: 11.5px; }
+
 /* ============ 家长指引 ============ */
 .guide {
   background: var(--card); border: 1px solid var(--line);

@@ -85,9 +85,61 @@ export function renderPaperSheets(paper) {
   return pages.join('');
 }
 
+// ================= 口算计时页（日课模式 · 40 题四列网格） =================
+
+export function renderSprintSheet(paper, sprint) {
+  const items = sprint.items.map((it, i) => `
+    <div class="sprint-item">
+      <span class="sp-no">${i + 1}</span>
+      <span class="sp-prompt">${it.prompt}</span>
+      <span class="sp-blank"></span>
+    </div>`).join('');
+  const lastScoreBox = sprint.lastScore
+    ? `<div class="sprint-last">上次 ${sprint.lastScore.seconds} 秒 · 对 ${sprint.lastScore.correct}/${sprint.lastScore.total}</div>`
+    : `<div class="sprint-last empty">首次挑战</div>`;
+  return `
+  <article class="sheet exam-sheet sprint-sheet" data-student="${paper.studentId}" data-page="sprint">
+    <header class="exam-head sprint-head">
+      <div class="exam-title-row">
+        <div class="exam-badge">${paper.student.name}</div>
+        <div class="exam-title">
+          <h1>口算计时页</h1>
+          <p class="exam-sub">Mental Sprint · 第 ${paper.setNumber} 套 · ${paper.student.label}</p>
+        </div>
+        ${lastScoreBox}
+      </div>
+      <div class="exam-fields sprint-fields">
+        <span>限时 3 分钟</span>
+        <span>开始：<i></i>:<i></i></span>
+        <span>结束：<i></i>:<i></i></span>
+        <span>用时：<i class="wide"></i></span>
+        <span class="score-box">对：<i></i>/40</span>
+      </div>
+    </header>
+    <div class="sprint-grid">${items}</div>
+    <footer class="sheet-foot">
+      <span>math-mini-challenge · 口算地基</span>
+      <span>${paper.student.name} · 第 ${paper.setNumber} 套 · 计时页</span>
+    </footer>
+  </article>`;
+}
+
+export function renderSprintAnswers(sprint) {
+  const rows = sprint.items.map((it, i) => `
+    <div class="ans-row sprint-ans-row">
+      <span class="ans-no">${i + 1}</span>
+      <span class="ans-val">${it.answer}</span>
+    </div>`).join('');
+  return `
+    <div class="ans-section sprint-ans-section">
+      <div class="ans-sec-title">口算区 · 40 题</div>
+      <div class="sprint-ans-grid">${rows}</div>
+    </div>`;
+}
+
 // ================= 答案页（家长批阅用，紧凑双栏） =================
 
-export function renderAnswerSheet(paper, focusQuestions = []) {
+export function renderAnswerSheet(paper, focusQuestions = [], sprint = null) {
   let idx = 0;
   const secs = paper.sections.map((sec) => {
     const rows = sec.questions.map((q, i) => `
@@ -110,7 +162,7 @@ export function renderAnswerSheet(paper, focusQuestions = []) {
       <h2>参考答案与批阅页 · ${paper.student.label}</h2>
       <p>第 ${paper.setNumber} 套 · 批阅标记：✓ 对 / △ 粗心 / ✗ 错 / ？需讲解 —— 批完回到系统「批阅」页录入</p>
     </header>
-    <div class="ans-columns">${secs}${renderFocusAnswers(focusQuestions)}</div>
+    <div class="ans-columns">${sprint ? renderSprintAnswers(sprint) : ''}${secs}${renderFocusAnswers(focusQuestions)}</div>
   </article>`;
 }
 
@@ -246,6 +298,34 @@ export function renderExplainList(studentLabel, groups) {
 }
 
 // ================= 批阅界面（屏幕） =================
+
+// 口算区批阅（日课模式）：默认全对，只点错题 + 录入用时秒数与对题数（自动=40-标错数，可手改）。
+export function renderSprintGrading(sprint, pending = {}) {
+  const wrong = pending.wrong || {};
+  const items = sprint.items.map((it, i) => {
+    const isWrong = !!wrong[i];
+    return `
+    <button class="sprint-cell ${isWrong ? 'wrong' : ''}" type="button" data-sidx="${i}">
+      <span class="sc-no">${i + 1}</span>
+      <span class="sc-prompt">${it.prompt} ${it.answer}</span>
+      <span class="sc-mark">${isWrong ? '✗' : '✓'}</span>
+    </button>`;
+  }).join('');
+  const wrongCount = Object.values(wrong).filter(Boolean).length;
+  const autoCorrect = 40 - wrongCount;
+  const correctVal = (pending.correct !== null && pending.correct !== undefined && pending.correct !== '')
+    ? pending.correct : autoCorrect;
+  return `
+  <div class="grade-section sprint-grading">
+    <h3>口算区 · 40 题（默认全对，点错的题）</h3>
+    <div class="sprint-grade-grid">${items}</div>
+    <div class="sprint-timing-row">
+      <label>用时（秒）<input type="number" id="sprint-seconds" min="1" value="${pending.seconds || ''}" placeholder="必填"></label>
+      <label>对题数<input type="number" id="sprint-correct" min="0" max="40" value="${correctVal}"></label>
+      <span class="sprint-auto-hint">标错 ${wrongCount} 题 · 自动对题数 ${autoCorrect}（可手改）</span>
+    </div>
+  </div>`;
+}
 
 export function renderGradingPanel(paper, existing = {}) {
   let idx = 0;

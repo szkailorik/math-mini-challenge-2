@@ -34,12 +34,16 @@
   <!-- 试卷 -->
   <main id="panel-paper" class="tab-panel on">
     <div class="toolbar">
-      <button class="tool-btn primary" data-print="print-papers">🖨 打印双人四页</button>
+      <div class="mode-switch">
+        <button class="tool-btn mode-btn" data-mode="daily">📅 日课模式</button>
+        <button class="tool-btn mode-btn" data-mode="realistic">🎯 拟真模式</button>
+      </div>
+      <button class="tool-btn primary" data-print="print-papers">🖨 打印双人套卷</button>
       <button class="tool-btn" data-print="print-papers-kai">只印 KAI</button>
       <button class="tool-btn" data-print="print-papers-lorik">只印 Lorik</button>
       <button class="tool-btn answer" data-print="print-answers">🗝 打印答案批阅页</button>
     </div>
-    <p class="note">同一套号永远生成同一份试卷（可随时补打）。换 <b>＋/−</b> 出新一套。屏幕预览即打印效果。</p>
+    <p class="note">同一套号永远生成同一份试卷（可随时补打）。换 <b>＋/−</b> 出新一套。屏幕预览即打印效果。<b>日课模式</b>=口算计时页+现有两页+按需回炉页；<b>拟真模式</b>=现有两页+按需回炉页。</p>
     <div id="paper-preview" class="preview"></div>
   </main>
 
