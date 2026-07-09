@@ -80,7 +80,7 @@ function stepsFor(entry) {
 }
 
 // —— 单个变式：带盐重试，直到指纹不撞 seen（原题 + variantHistory + 本条已产变式）——
-function makeOneVariant(entry, currentSet, salt, seen) {
+function makeOneVariant(entry, currentSet, salt, seen, studentId) {
   let last = null;
   for (let attempt = 0; attempt <= RETRY_LIMIT; attempt++) {
     let q;
@@ -91,7 +91,7 @@ function makeOneVariant(entry, currentSet, salt, seen) {
       q = generateVariant(rng, entry.qmodel, { bugId: entry.bugId || null, level: variantLevel(salt) });
     } else {
       const saltA = entry.id + salt + (attempt > 0 ? '#' + attempt : '');
-      q = buildVariant(entry.domain, entry.tag, 3, saltA, currentSet);
+      q = buildVariant(entry.domain, entry.tag, STUDENTS[studentId].level, saltA, currentSet);
     }
     if (!q) return null;
     const fp = fingerprint(q.prompt);
@@ -149,10 +149,10 @@ export function buildBooklet(studentId, currentSet, filter = {}) {
 
     const produced = [];
     for (const step of stepsFor(entry)) {
-      const v = makeOneVariant(entry, currentSet, step.salt, seen);
+      const v = makeOneVariant(entry, currentSet, step.salt, seen, studentId);
       if (!v) continue;
       seen.add(v.fp);
-      produced.push(v.fp);
+      if (!v.dup) produced.push(v.fp);
       const item = {
         entryId: entry.id,
         kind: step.kind,

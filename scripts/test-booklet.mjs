@@ -153,5 +153,62 @@ const withMast = buildBooklet('kai', CURRENT, { preset: 'due', includeMastered: 
 ok(new Set(withMast.items.map((i) => i.entryId)).has('u1'), 'includeMastered:true 纳入已掌握');
 saveProfile('kai', book);
 
+// ---- 修1: 变式难度应取当前学员 level（STUDENTS[studentId].level），而非硬编码 ----
+// kai.level=3, lorik.level=2；同一 v2 条目、同一 tag/salt(currentSet 固定)，仅 studentId 不同，
+// buildVariant 的 level 参数不同应导致生成的题面数字范围不同 → prompt 文本不同。
+const LEVEL_SET = 20;
+const u1Entry = v2({ domain: 'unit', tag: 'unit.speed', prompt: '<span>60km/h</span>', answer: '2h' });
+saveProfile('kai', { history: [], errorBook: { u1: u1Entry } });
+saveProfile('lorik', { history: [], errorBook: { u1: u1Entry } });
+let kaiBk, lorikBk, levelErr = null;
+try {
+  kaiBk = buildBooklet('kai', LEVEL_SET, { preset: 'due' });
+  lorikBk = buildBooklet('lorik', LEVEL_SET, { preset: 'due' });
+} catch (e) {
+  levelErr = e;
+}
+ok(!levelErr, `修1: kai/lorik 出卷均不抛错 (${levelErr ? levelErr.message : ''})`);
+if (!levelErr) {
+  const kaiVarPrompts = kaiBk.items.filter((i) => i.entryId === 'u1' && i.kind !== 'original').map((i) => i.q.prompt);
+  const lorikVarPrompts = lorikBk.items.filter((i) => i.entryId === 'u1' && i.kind !== 'original').map((i) => i.q.prompt);
+  ok(kaiVarPrompts.length > 0 && lorikVarPrompts.length > 0, '修1: kai/lorik 均产出变式');
+  ok(JSON.stringify(kaiVarPrompts) !== JSON.stringify(lorikVarPrompts), `修1: lorik(level=2) 变式题面与 kai(level=3) 不同 (kai=${JSON.stringify(kaiVarPrompts)} lorik=${JSON.stringify(lorikVarPrompts)})`);
+}
+saveProfile('kai', book); // 还原
+saveProfile('lorik', { history: [], errorBook: {} });
+
+// ---- 修2: 撞题(dup)变式不应计入 fingerprints（不应被算作"新产生的指纹"） ----
+// 构造场景：直接复算 makeOneVariant 内部对 v2 分支的调用序列（saltA = entryId+salt(+#attempt)，
+// attempt 0..RETRY_LIMIT(=6)），把 L2 步骤全部 7 个 attempt 会产出的指纹都塞进 variantHistory，
+// 这样无论重试多少次都会撞在 history 上 → 用尽 RETRY_LIMIT 后返回 dup:true。
+const DUP_SET = 21;
+const { fingerprint: fp2 } = await import('../js/engine/booklet.js');
+const { buildVariant: buildVariantDirect } = await import('../js/paper.js');
+const RETRY_LIMIT = 6;
+const dupTag = 'unit.speed';
+const dupDomain = 'unit';
+const kaiLevel = 3; // STUDENTS.kai.level；kai 场景下修1（level 动态化）前后取值相同，不影响本用例
+const l2AllFps = new Set();
+for (let attempt = 0; attempt <= RETRY_LIMIT; attempt++) {
+  const saltA = 'u1' + 'L2' + (attempt > 0 ? '#' + attempt : '');
+  const q = buildVariantDirect(dupDomain, dupTag, kaiLevel, saltA, DUP_SET);
+  if (q) l2AllFps.add(fp2(q.prompt));
+}
+const dupBookEntry = v2({
+  domain: dupDomain, tag: dupTag, prompt: '<span>60km/h</span>', answer: '2h',
+  variantHistory: [...l2AllFps],
+});
+saveProfile('kai', { history: [], errorBook: { u1: dupBookEntry } });
+const dupBk = buildBooklet('kai', DUP_SET, { preset: 'due' });
+const dupItems = dupBk.items.filter((i) => i.entryId === 'u1' && i.kind !== 'original');
+const hasDup = dupItems.some((i) => i.dup === true);
+ok(hasDup, '修2: 构造场景确实触发了 dup（前置条件）');
+if (hasDup) {
+  const dupFps = dupItems.filter((i) => i.dup === true).map((i) => fp2(i.q.prompt));
+  const exposedFps = dupBk.fingerprints.u1 || [];
+  ok(dupFps.every((f) => !exposedFps.includes(f)), `修2: dup 变式的指纹不出现在 fingerprints.u1 中 (dupFps=${JSON.stringify(dupFps)} exposed=${JSON.stringify(exposedFps)})`);
+}
+saveProfile('kai', book); // 还原
+
 if (fails) { console.error(`\n${fails} 个失败`); process.exit(1); }
 console.log('\n✅ 错题本出卷引擎测试全部通过');
