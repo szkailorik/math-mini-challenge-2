@@ -4,6 +4,6 @@
   "version": "2.0.0",
   "type": "module",
   "scripts": {
-    "validate": "node scripts/validate.mjs && node scripts/test-adaptive.mjs && node scripts/test-map.mjs"
+    "validate": "node scripts/validate.mjs && node scripts/test-adaptive.mjs && node scripts/test-map.mjs && node scripts/test-qmodel.mjs"
   }
 }
