@@ -210,7 +210,7 @@ const BUGS_RAW = [
     id: 'dist.over_div',
     family: 'knowledge',
     label: '除法错误地分配到加减号两边',
-    diagnose: '把 (a+b)÷c 当成分配律那样拆成 a÷c+b÷c 来算，但对被除数是和的情况用错了方向',
+    diagnose: '把 c÷(a+b) 当成分配律拆成 c÷a+c÷b 来算，忽略了这条规则只在被除数是和/差时才成立',
     explain: '除法分配律只在"被除数是和/差"时成立：(a+b)÷c = a÷c + b÷c 是对的，但反过来 c÷(a+b) 不能拆成 c÷a+c÷b',
   },
   {
