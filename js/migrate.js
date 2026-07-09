@@ -3,7 +3,7 @@
 // 本表把 v2 tag 一一落到 js/map/skills.js 的真实 skillId（目标值经 test-migrate 硬校验）。
 // 查不到的 tag 落 mix.complex 兜底哨兵（非真实 skillId，表示"未分类复杂题"，不参与 skill 专项匹配）。
 
-const FALLBACK_SKILL = 'mix.complex';
+export const FALLBACK_SKILL = 'mix.complex';
 
 // key = v2 tag（domain.subtag），value = v3 skillId ∈ SKILL_IDS。
 export const TAG_TO_SKILL = {

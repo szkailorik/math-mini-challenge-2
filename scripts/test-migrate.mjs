@@ -8,8 +8,9 @@ globalThis.localStorage = {
   removeItem: (k) => mem.delete(k),
 };
 
-const { migrateProfile, migrateDump, TAG_TO_SKILL } = await import('../js/migrate.js');
+const { migrateProfile, migrateDump, TAG_TO_SKILL, FALLBACK_SKILL } = await import('../js/migrate.js');
 const { SKILL_IDS } = await import('../js/map/skills.js');
+const { recordGrades } = await import('../js/errorbook.js');
 
 let fails = 0;
 const ok = (cond, msg) => { if (!cond) { fails++; console.error('  ✗', msg); } else console.log('  ✓', msg); };
@@ -85,6 +86,21 @@ console.log('硬校验：TAG_TO_SKILL 所有目标值 ∈ SKILL_IDS');
   const bad = Object.entries(TAG_TO_SKILL).filter(([, v]) => !idset.has(v));
   ok(bad.length === 0, `全部目标 skillId 真实存在${bad.length ? '，越界：' + JSON.stringify(bad) : ''}`);
   ok(Object.keys(TAG_TO_SKILL).length >= 20, `映射表非空（${Object.keys(TAG_TO_SKILL).length} 条）`);
+}
+
+console.log('recordGrades：新建错题条目当场补 skill（不等下次迁移）');
+{
+  const sid = 'kai';
+  localStorage.removeItem(`profile_${sid}`);
+  const items = [
+    { id: 'n1', tag: 'mixed.paren_order', domain: 'mixed', prompt: 'p', answer: 'a', hint: 'h', grade: 'wrong' },
+    { id: 'n2', tag: 'weird.unknown_tag_xyz', domain: 'mixed', prompt: 'p', answer: 'a', hint: 'h', grade: 'careless' },
+    { id: 'n3', tag: 'oral.int', domain: 'oral', skill: 'preset.skill', prompt: 'p', answer: 'a', hint: 'h', grade: 'explain' },
+  ];
+  const p = recordGrades(sid, 1, items);
+  ok(p.errorBook.n1.skill === 'gen.order_bracket', '新条目 v2 tag 查表值：mixed.paren_order → gen.order_bracket');
+  ok(p.errorBook.n2.skill === FALLBACK_SKILL, '新条目未知 tag 落 FALLBACK_SKILL');
+  ok(p.errorBook.n3.skill === 'preset.skill', '新条目自带 item.skill（v3 口算题）优先于查表');
 }
 
 console.log(fails === 0 ? '\n✅ test-migrate 全部通过' : `\n❌ ${fails} 项失败`);

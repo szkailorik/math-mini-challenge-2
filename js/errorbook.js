@@ -1,5 +1,6 @@
 import { loadProfile, saveProfile } from './store.js';
 import { DOMAIN_LABELS } from './config.js';
+import { TAG_TO_SKILL, FALLBACK_SKILL } from './migrate.js';
 
 // ============ 错题录入 ============
 // gradedItems: [{ id, tag, domain, prompt, answer, hint, grade }]
@@ -25,6 +26,7 @@ export function recordGrades(studentId, setNumber, gradedItems) {
       } else {
         profile.errorBook[item.id] = {
           tag: item.tag, domain: item.domain,
+          skill: item.skill || TAG_TO_SKILL[item.tag] || FALLBACK_SKILL,
           prompt: item.prompt, answer: item.answer, hint: item.hint,
           grade: item.grade, count: 1,
           rewrongCount: 0,
