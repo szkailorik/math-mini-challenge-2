@@ -5,11 +5,13 @@ import {
   renderPaperSheets, renderAnswerSheet, renderPracticeSheets,
   renderPracticeAnswers, renderExplainList, renderGradingPanel,
   renderFocusSheet, renderSprintSheet, renderSprintGrading,
+  renderBookletSheets, renderBookletAnswers,
 } from './render.js';
 import {
   previewLevels, previewFocus, ensureStamp, updateDifficulty,
 } from './adaptive.js';
 import { buildSprintPage } from './engine/composer.js';
+import { buildBooklet } from './engine/booklet.js';
 import { recordSkillResults, recordSprintTiming, refreshStates } from './engine/mastery.js';
 import { printHTML } from './print.js';
 import {
@@ -31,6 +33,7 @@ const pendingPractice = { kai: {}, lorik: {} };
 const pendingFocus = { kai: {}, lorik: {} }; // 批阅页第七区标记：key = entryId|kind|序号
 const blankSprint = () => ({ wrong: {}, seconds: '', correct: null });
 const pendingSprint = { kai: blankSprint(), lorik: blankSprint() }; // 批阅页口算区：wrong=标错索引集合
+let currentBooklet = null; // 错题本快速出册预览：{ filter, booklet } | null（未出册）
 
 function levelsProvider(studentId) {
   return (setNumber) => previewLevels(studentId, setNumber);
@@ -111,6 +114,7 @@ function changeSet(delta) {
   pendingGrades.kai = {}; pendingGrades.lorik = {};
   pendingFocus.kai = {}; pendingFocus.lorik = {};
   pendingSprint.kai = blankSprint(); pendingSprint.lorik = blankSprint();
+  currentBooklet = null;
   renderActive();
   afterDataChange();
 }
@@ -252,10 +256,73 @@ function submitGrades() {
   afterDataChange();
 }
 
+// ================= 错题本页 · 快速出册 =================
+function populateDomainSelects() {
+  const opts = Object.entries(DOMAIN_LABELS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
+  const skillSel = $('#preset-skill-domain');
+  const freeSel = $('#free-domain');
+  if (skillSel) skillSel.innerHTML = opts;
+  if (freeSel) freeSel.innerHTML = `<option value="">全部技能域</option>${opts}`;
+}
+
+function buildAndPreviewBooklet(filter) {
+  const booklet = buildBooklet(errorStudent, state.currentSet, filter);
+  currentBooklet = { filter, booklet };
+  renderBookletPreview();
+}
+
+function renderBookletPreview() {
+  const el = $('#booklet-preview');
+  if (!el) return;
+  if (!currentBooklet) {
+    el.innerHTML = '<p class="note booklet-hint">点击上方预设按钮，或展开「自由筛选」出一册训练题</p>';
+    return;
+  }
+  const { booklet } = currentBooklet;
+  if (booklet.empty) {
+    el.innerHTML = '<div class="booklet-panel"><p class="empty">没有匹配的错题 —— 换个预设或调整筛选条件试试</p></div>';
+    return;
+  }
+  const student = STUDENTS[errorStudent];
+  el.innerHTML = `
+    <div class="booklet-panel">
+      <div class="booklet-panel-head">
+        <h3>${booklet.title}<span class="booklet-count">共 ${booklet.items.length} 题</span></h3>
+        <button class="tool-btn primary" id="booklet-print">🖨 打印这册（含答案页）</button>
+      </div>
+      <div class="booklet-preview-sheets">${renderBookletSheets(student, booklet)}</div>
+    </div>`;
+}
+
+// 把本次出册消耗的变式指纹并入对应错题条目的 variantHistory（按 entryId 去重合并），
+// 保证下次再出同 preset 的册不会重复出一模一样的变式题。只在真正打印时调用（预览不消耗）。
+function commitBookletFingerprints(studentId, fingerprints) {
+  if (!fingerprints || !Object.keys(fingerprints).length) return;
+  const profile = loadProfile(studentId);
+  for (const [entryId, fps] of Object.entries(fingerprints)) {
+    const e = profile.errorBook[entryId];
+    if (!e) continue;
+    if (!Array.isArray(e.variantHistory)) e.variantHistory = [];
+    for (const fp of fps) if (!e.variantHistory.includes(fp)) e.variantHistory.push(fp);
+  }
+  saveProfile(studentId, profile);
+}
+
+function printBooklet() {
+  if (!currentBooklet || currentBooklet.booklet.empty) return;
+  const { booklet } = currentBooklet;
+  const student = STUDENTS[errorStudent];
+  const html = renderBookletSheets(student, booklet) + renderBookletAnswers(booklet);
+  printHTML(html, booklet.title);
+  commitBookletFingerprints(errorStudent, booklet.fingerprints);
+  afterDataChange();
+}
+
 // ================= 错题本页 =================
 function renderErrorTab() {
   document.querySelectorAll('#panel-errorbook .student-btn').forEach((b) =>
     b.classList.toggle('on', b.dataset.student === errorStudent));
+  renderBookletPreview();
   const stats = errorBookStats(errorStudent, state.currentSet);
   $('#eb-stats').innerHTML = `
     <span>活跃错题 <b>${stats.active}</b></span>
@@ -410,7 +477,27 @@ function bind() {
   document.querySelectorAll('#panel-grading .student-btn').forEach((b) =>
     b.addEventListener('click', () => { gradingStudent = b.dataset.student; renderGradingTab(); }));
   document.querySelectorAll('#panel-errorbook .student-btn').forEach((b) =>
-    b.addEventListener('click', () => { errorStudent = b.dataset.student; renderErrorTab(); }));
+    b.addEventListener('click', () => { errorStudent = b.dataset.student; currentBooklet = null; renderErrorTab(); }));
+
+  populateDomainSelects();
+  document.querySelectorAll('.preset-btn').forEach((b) =>
+    b.addEventListener('click', () => {
+      const preset = b.dataset.preset;
+      const filter = preset === 'skill'
+        ? { preset: 'skill', domain: $('#preset-skill-domain').value }
+        : { preset };
+      buildAndPreviewBooklet(filter);
+    }));
+  $('#free-build').addEventListener('click', () => {
+    const domain = $('#free-domain').value || undefined;
+    const sinceRaw = $('#free-since').value;
+    const sinceDays = sinceRaw !== '' ? Number(sinceRaw) : undefined;
+    const includeMastered = $('#free-mastered').checked;
+    buildAndPreviewBooklet({ preset: null, domain, sinceDays, includeMastered });
+  });
+  $('#booklet-preview').addEventListener('click', (ev) => {
+    if (ev.target.closest('#booklet-print')) printBooklet();
+  });
 
   $('#grading-list').addEventListener('click', (ev) => {
     const sc = ev.target.closest('.sprint-cell');

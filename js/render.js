@@ -272,6 +272,80 @@ export function renderPracticeAnswers(pack) {
   </article>`;
 }
 
+// ================= 错题训练册（快速出卷·双通道） =================
+// 每条错题一组：原题（回炉）+ 阶梯变式（变式/变式+/对比），组内不跨页。
+
+const BOOKLET_KIND = { original: '回炉', L2: '变式', L3: '变式+', L4: '对比' };
+
+function bookletGroups(booklet) {
+  const groups = [];
+  let cur = null;
+  for (const item of booklet.items) {
+    if (!cur || cur.entryId !== item.entryId) {
+      cur = { entryId: item.entryId, items: [] };
+      groups.push(cur);
+    }
+    cur.items.push(item);
+  }
+  return groups;
+}
+
+export function renderBookletSheets(student, booklet) {
+  if (!booklet || booklet.empty) return '';
+  let i = 0;
+  const groups = bookletGroups(booklet).map((g) => {
+    const rows = g.items.map((item) => {
+      i += 1;
+      const indented = item.kind !== 'original';
+      return `
+      <div class="q lines booklet-q ${indented ? 'indent' : ''} ${item.kind}">
+        <span class="q-no">${i}.</span>
+        <div class="q-body">
+          <div class="q-prompt">${item.q.prompt}</div>
+          <div class="practice-meta">
+            <span class="p-kind">${BOOKLET_KIND[item.kind] || item.kind}</span>
+            ${item.dup ? '<span class="p-dup">⚠可能重复</span>' : ''}
+            <span class="p-mark">□已会 □又错 □需讲解</span>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+    return `<div class="booklet-group">${rows}</div>`;
+  }).join('');
+  return `
+  <article class="sheet booklet-sheet">
+    <header class="exam-head">
+      <div class="exam-title-row">
+        <div class="exam-badge">${student.name}</div>
+        <div class="exam-title">
+          <h1>错题训练册</h1>
+          <p class="exam-sub">${booklet.title}</p>
+        </div>
+      </div>
+      <div class="exam-fields"><span>日期：<i></i></span><span>用时：<i></i></span></div>
+    </header>
+    <div class="booklet-body">${groups}</div>
+    <footer class="sheet-foot"><span>做完由家长按 □ 勾选，再回系统「错题本」录入</span></footer>
+  </article>`;
+}
+
+export function renderBookletAnswers(booklet) {
+  if (!booklet || booklet.empty) return '';
+  const rows = booklet.items.map((item, i) => `
+    <div class="ans-row">
+      <span class="ans-no">${i + 1}</span>
+      <span class="ans-val">${item.q.answer}</span>
+      <span class="ans-hint">${item.q.hint || ''}</span>
+    </div>`).join('');
+  return `
+  <article class="sheet ans-sheet">
+    <header class="ans-head">
+      <h2>参考答案 · ${booklet.title}</h2>
+    </header>
+    <div class="ans-columns"><div class="ans-section">${rows}</div></div>
+  </article>`;
+}
+
 // ================= 讲解清单（家长辅导用） =================
 
 export function renderExplainList(studentLabel, groups) {

@@ -66,12 +66,32 @@
       <button class="student-btn on" data-student="kai">KAI</button>
       <button class="student-btn" data-student="lorik">Lorik</button>
       <span class="spacer"></span>
-      <button class="tool-btn primary" data-print="print-eb-due">🖨 到期复练卷</button>
-      <button class="tool-btn" data-print="print-eb-priority">复错优先卷</button>
-      <button class="tool-btn" data-print="print-eb-all">全部错题卷</button>
       <button class="tool-btn answer" data-print="print-explain">📋 讲解清单</button>
       <button class="tool-btn primary" id="eb-submit">回写复练结果</button>
     </div>
+
+    <div class="booklet-quick">
+      <div class="preset-row">
+        <button class="preset-btn" data-preset="due">📄 到期复练</button>
+        <button class="preset-btn" data-preset="priority">🔁 复错优先</button>
+        <button class="preset-btn" data-preset="week">📅 本周周清</button>
+        <div class="preset-skill">
+          <button class="preset-btn" data-preset="skill">🎯 按技能专项</button>
+          <select id="preset-skill-domain" class="skill-select"></select>
+        </div>
+      </div>
+      <details class="booklet-free">
+        <summary>自由筛选</summary>
+        <div class="free-filter-row">
+          <select id="free-domain"></select>
+          <label>时间窗（天）<input type="number" id="free-since" min="1" placeholder="不限"></label>
+          <label class="chk"><input type="checkbox" id="free-mastered"> 含已掌握</label>
+          <button class="tool-btn primary" id="free-build">出册</button>
+        </div>
+      </details>
+      <div id="booklet-preview" class="booklet-preview"></div>
+    </div>
+
     <div id="eb-stats" class="eb-stats"></div>
     <div id="eb-list"></div>
   </main>
