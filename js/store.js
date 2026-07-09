@@ -43,6 +43,10 @@ export function saveState(state) { write('state', state); }
 export function loadStamps() { return read('stamps', {}) || {}; }
 export function saveStamps(stamps) { write('stamps', stamps); }
 
+// 掌握度状态机存储（每学员一份 { [skillId]: Entry }，模式同 stamps）
+export function loadMastery(studentId) { return read(`mastery_${studentId}`, {}) || {}; }
+export function saveMastery(studentId, mastery) { write(`mastery_${studentId}`, mastery); }
+
 // 全量导出/导入（换设备迁移用；无需服务器）
 export function exportAll() {
   const dump = { version: APP_VERSION, exportedAt: new Date().toISOString(), state: loadState() };
