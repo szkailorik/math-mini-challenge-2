@@ -1,4 +1,5 @@
 import { SKILLS, SKILL_IDS, byLayer } from '../js/map/skills.js';
+import { BUGS, BUG_IDS } from '../js/map/bugs.js';
 let fails = 0;
 const ok = (c, m) => { if (!c) { fails++; console.error('  ✗', m); } else console.log('  ✓', m); };
 
@@ -25,5 +26,18 @@ const dfs = (id) => {
 };
 SKILL_IDS.forEach(dfs);
 ok(!cyclic, '依赖图无环');
+// bug 错因库校验
+ok(BUG_IDS.length >= 35, `bug 库 ≥35 条：${BUG_IDS.length}`);
+const bugFamilies = new Set();
+const seenBugIds = new Set();
+for (const b of Object.values(BUGS)) {
+  ok(b.label && b.diagnose && b.explain, `${b.id}: 三段文案齐`);
+  ok(['knowledge', 'skill', 'strategy'].includes(b.family), `${b.id}: family 合法`);
+  ok(!seenBugIds.has(b.id), `${b.id}: id 不重复`);
+  seenBugIds.add(b.id);
+  bugFamilies.add(b.family);
+}
+ok(bugFamilies.size === 3, `bug 库三类 family 均有覆盖：${[...bugFamilies].join(',')}`);
+
 if (fails) { console.error(`${fails} 失败`); process.exit(1); }
 console.log('✅ 技能地图校验通过');
