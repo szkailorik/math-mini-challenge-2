@@ -2,7 +2,7 @@
 // 与旧系统 GistSync 不同：不做"以谁为准"的冲突对比，而是逐字段合并——
 // 错题本按题目指纹索引、计数只增不减、历史按套号追加，天然可合并。
 import { STUDENT_IDS, STORE_PREFIX } from './config.js';
-import { loadProfile, saveProfile, loadState, saveState, loadStamps, saveStamps } from './store.js';
+import { loadProfile, saveProfile, loadState, saveState, loadStamps, saveStamps, loadMastery, saveMastery } from './store.js';
 import { migrateDump } from './migrate.js';
 
 const GIST_FILE = 'mmc2-data.json';
@@ -67,8 +67,27 @@ export function mergeProfile(local, remote) {
 
 function buildDump() {
   const dump = { schemaVersion: 3, savedAt: new Date().toISOString(), state: loadState(), stamps: loadStamps() };
-  for (const id of STUDENT_IDS) dump[`profile_${id}`] = loadProfile(id);
+  for (const id of STUDENT_IDS) {
+    dump[`profile_${id}`] = loadProfile(id);
+    dump[`mastery_${id}`] = loadMastery(id);
+  }
   return dump;
+}
+
+// 掌握度合并：按 skillId 逐条比 lastSet，较新一方胜（相等取 local）；单方独有直接保留。
+// 键排序输出，风格同 mergeProfile（保证任意方向合并结果字节一致）。
+export function mergeMastery(local = {}, remote = {}) {
+  const merged = {};
+  for (const skillId of new Set([...Object.keys(local), ...Object.keys(remote)])) {
+    const l = local[skillId];
+    const r = remote[skillId];
+    if (l && r) {
+      merged[skillId] = (r.lastSet || 0) > (l.lastSet || 0) ? r : l;
+    } else {
+      merged[skillId] = l || r;
+    }
+  }
+  return Object.fromEntries(Object.keys(merged).sort().map((k) => [k, merged[k]]));
 }
 
 // 学员画像里的动态难度：各域取「更接近初始值修改次数多」无从判断，
@@ -96,6 +115,7 @@ function applyMerged(remoteDump) {
       merged.difficulty = mergeDifficulty(local, remote);
       saveProfile(id, merged);
     }
+    saveMastery(id, mergeMastery(loadMastery(id), remoteDump[`mastery_${id}`] || {}));
   }
   const state = loadState();
   if (remoteDump.state?.currentSet > state.currentSet) {

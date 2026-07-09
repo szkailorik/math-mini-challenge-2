@@ -1,4 +1,4 @@
-// v2→v3 迁移单测：错题条目补 skill、mastery 补空、幂等（字节级）、
+// v2→v3 迁移单测：错题条目补 skill、幂等（字节级）、
 // migrateDump 版本化与 schema:3 原样返回、TAG_TO_SKILL 目标值硬校验 ∈ SKILL_IDS。
 // localStorage 内存垫片（浏览器外运行），模式抄 test-booklet.mjs。
 const mem = new Map();
@@ -40,7 +40,7 @@ console.log('migrateProfile：补 skill / mastery');
   ok(p.errorBook.b1.skill === 'mix.convert_judge', 'bridge.chain → mix.convert_judge');
   ok(p.errorBook.x1.skill === 'mix.complex', '未知 tag → mix.complex 兜底');
   ok(Object.values(p.errorBook).every((e) => typeof e.skill === 'string'), '每条错题都有 skill');
-  ok(p.mastery && typeof p.mastery === 'object' && Object.keys(p.mastery).length === 0, 'mastery 补空 {}');
+  ok(!('mastery' in p), 'migrateProfile 不再写入幽灵字段 profile.mastery');
   ok(p.difficulty && p.difficulty.mixed === 3, 'difficulty 原样保留');
 }
 
@@ -54,10 +54,6 @@ console.log('migrateProfile：幂等（字节级）');
   const withSkill = sample();
   withSkill.errorBook.m1.skill = 'custom.preset';
   ok(migrateProfile(withSkill).errorBook.m1.skill === 'custom.preset', '已有 skill 不覆盖');
-  // 已有 mastery 不被清空
-  const withMastery = sample();
-  withMastery.mastery = { add20: { seen: 5 } };
-  ok(migrateProfile(withMastery).mastery.add20.seen === 5, '已有 mastery 不清空');
 }
 
 console.log('migrateDump：版本化与幂等');

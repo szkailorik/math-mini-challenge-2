@@ -64,7 +64,6 @@ export function migrateProfile(profile) {
       if (entry.tag != null) unknown.add(entry.tag);
     }
   }
-  if (!profile.mastery || typeof profile.mastery !== 'object') profile.mastery = {};
   if (unknown.size) {
     console.warn(`[migrate] ${unknown.size} 个未映射 v2 tag 落 ${FALLBACK_SKILL}：`, [...unknown].join(', '));
   }
