@@ -85,9 +85,61 @@ export function renderPaperSheets(paper) {
   return pages.join('');
 }
 
+// ================= 口算计时页（日课模式 · 40 题四列网格） =================
+
+export function renderSprintSheet(paper, sprint) {
+  const items = sprint.items.map((it, i) => `
+    <div class="sprint-item">
+      <span class="sp-no">${i + 1}</span>
+      <span class="sp-prompt">${it.prompt}</span>
+      <span class="sp-blank"></span>
+    </div>`).join('');
+  const lastScoreBox = sprint.lastScore
+    ? `<div class="sprint-last">上次 ${sprint.lastScore.seconds} 秒 · 对 ${sprint.lastScore.correct}/${sprint.lastScore.total}</div>`
+    : `<div class="sprint-last empty">首次挑战</div>`;
+  return `
+  <article class="sheet exam-sheet sprint-sheet" data-student="${paper.studentId}" data-page="sprint">
+    <header class="exam-head sprint-head">
+      <div class="exam-title-row">
+        <div class="exam-badge">${paper.student.name}</div>
+        <div class="exam-title">
+          <h1>口算计时页</h1>
+          <p class="exam-sub">Mental Sprint · 第 ${paper.setNumber} 套 · ${paper.student.label}</p>
+        </div>
+        ${lastScoreBox}
+      </div>
+      <div class="exam-fields sprint-fields">
+        <span>限时 3 分钟</span>
+        <span>开始：<i></i>:<i></i></span>
+        <span>结束：<i></i>:<i></i></span>
+        <span>用时：<i class="wide"></i></span>
+        <span class="score-box">对：<i></i>/40</span>
+      </div>
+    </header>
+    <div class="sprint-grid">${items}</div>
+    <footer class="sheet-foot">
+      <span>math-mini-challenge · 口算地基</span>
+      <span>${paper.student.name} · 第 ${paper.setNumber} 套 · 计时页</span>
+    </footer>
+  </article>`;
+}
+
+export function renderSprintAnswers(sprint) {
+  const rows = sprint.items.map((it, i) => `
+    <div class="ans-row sprint-ans-row">
+      <span class="ans-no">${i + 1}</span>
+      <span class="ans-val">${it.answer}</span>
+    </div>`).join('');
+  return `
+    <div class="ans-section sprint-ans-section">
+      <div class="ans-sec-title">口算区 · 40 题</div>
+      <div class="sprint-ans-grid">${rows}</div>
+    </div>`;
+}
+
 // ================= 答案页（家长批阅用，紧凑双栏） =================
 
-export function renderAnswerSheet(paper, focusQuestions = []) {
+export function renderAnswerSheet(paper, focusQuestions = [], sprint = null) {
   let idx = 0;
   const secs = paper.sections.map((sec) => {
     const rows = sec.questions.map((q, i) => `
@@ -110,7 +162,7 @@ export function renderAnswerSheet(paper, focusQuestions = []) {
       <h2>参考答案与批阅页 · ${paper.student.label}</h2>
       <p>第 ${paper.setNumber} 套 · 批阅标记：✓ 对 / △ 粗心 / ✗ 错 / ？需讲解 —— 批完回到系统「批阅」页录入</p>
     </header>
-    <div class="ans-columns">${secs}${renderFocusAnswers(focusQuestions)}</div>
+    <div class="ans-columns">${sprint ? renderSprintAnswers(sprint) : ''}${secs}${renderFocusAnswers(focusQuestions)}</div>
   </article>`;
 }
 
@@ -170,42 +222,66 @@ export function renderFocusAnswers(focusQuestions) {
     </div>`;
 }
 
-// ================= 错题复练卷 =================
+// ================= 错题训练册（快速出卷·双通道） =================
+// 每条错题一组：原题（回炉）+ 阶梯变式（变式/变式+/对比），组内不跨页。
 
-export function renderPracticeSheets(pack) {
-  const modeLabel = { due: '到期复练', priority: '复错优先', all: '全部错题' }[pack.mode] || '复练';
-  if (!pack.items.length) return '';
-  const qs = pack.items.map((item, i) => `
-    <div class="q lines practice-q ${item.kind}">
-      <span class="q-no">${i + 1}.</span>
-      <div class="q-body">
-        <div class="q-prompt">${item.q.prompt}</div>
-        <div class="practice-meta">
-          <span class="p-kind">${item.kind === 'original' ? '回炉' : '变式'}</span>
-          <span class="p-domain">${DOMAIN_LABELS[item.entry.domain] || item.entry.domain}</span>
-          <span class="p-mark">□已会 □又错 □需讲解</span>
+const BOOKLET_KIND = { original: '回炉', L2: '变式', L3: '变式+', L4: '对比' };
+
+function bookletGroups(booklet) {
+  const groups = [];
+  let cur = null;
+  for (const item of booklet.items) {
+    if (!cur || cur.entryId !== item.entryId) {
+      cur = { entryId: item.entryId, items: [] };
+      groups.push(cur);
+    }
+    cur.items.push(item);
+  }
+  return groups;
+}
+
+export function renderBookletSheets(student, booklet) {
+  if (!booklet || booklet.empty) return '';
+  let i = 0;
+  const groups = bookletGroups(booklet).map((g) => {
+    const rows = g.items.map((item) => {
+      i += 1;
+      const indented = item.kind !== 'original';
+      return `
+      <div class="q lines booklet-q ${indented ? 'indent' : ''} ${item.kind}">
+        <span class="q-no">${i}.</span>
+        <div class="q-body">
+          <div class="q-prompt">${item.q.prompt}</div>
+          <div class="practice-meta">
+            <span class="p-kind">${BOOKLET_KIND[item.kind] || item.kind}</span>
+            ${item.dup ? '<span class="p-dup">⚠可能重复</span>' : ''}
+            <span class="p-mark">□已会 □又错 □需讲解</span>
+          </div>
         </div>
-      </div>
-    </div>`).join('');
+      </div>`;
+    }).join('');
+    return `<div class="booklet-group">${rows}</div>`;
+  }).join('');
   return `
-  <article class="sheet practice-sheet">
+  <article class="sheet booklet-sheet">
     <header class="exam-head">
       <div class="exam-title-row">
-        <div class="exam-badge">${pack.student.name}</div>
+        <div class="exam-badge">${student.name}</div>
         <div class="exam-title">
-          <h1>错题复练卷 · ${modeLabel}</h1>
-          <p class="exam-sub">${pack.student.label} · 生成于第 ${pack.currentSet} 套 · 原题回炉 + 同类变式</p>
+          <h1>错题训练册</h1>
+          <p class="exam-sub">${booklet.title}</p>
         </div>
       </div>
       <div class="exam-fields"><span>日期：<i></i></span><span>用时：<i></i></span></div>
     </header>
-    <div class="q-list lines">${qs}</div>
+    <div class="booklet-body">${groups}</div>
     <footer class="sheet-foot"><span>做完由家长按 □ 勾选，再回系统「错题本」录入</span></footer>
   </article>`;
 }
 
-export function renderPracticeAnswers(pack) {
-  const rows = pack.items.map((item, i) => `
+export function renderBookletAnswers(booklet) {
+  if (!booklet || booklet.empty) return '';
+  const rows = booklet.items.map((item, i) => `
     <div class="ans-row">
       <span class="ans-no">${i + 1}</span>
       <span class="ans-val">${item.q.answer}</span>
@@ -214,7 +290,7 @@ export function renderPracticeAnswers(pack) {
   return `
   <article class="sheet ans-sheet">
     <header class="ans-head">
-      <h2>错题复练卷 · 参考答案 · ${pack.student.label}</h2>
+      <h2>参考答案 · ${booklet.title}</h2>
     </header>
     <div class="ans-columns"><div class="ans-section">${rows}</div></div>
   </article>`;
@@ -246,6 +322,34 @@ export function renderExplainList(studentLabel, groups) {
 }
 
 // ================= 批阅界面（屏幕） =================
+
+// 口算区批阅（日课模式）：默认全对，只点错题 + 录入用时秒数与对题数（自动=40-标错数，可手改）。
+export function renderSprintGrading(sprint, pending = {}) {
+  const wrong = pending.wrong || {};
+  const items = sprint.items.map((it, i) => {
+    const isWrong = !!wrong[i];
+    return `
+    <button class="sprint-cell ${isWrong ? 'wrong' : ''}" type="button" data-sidx="${i}">
+      <span class="sc-no">${i + 1}</span>
+      <span class="sc-prompt">${it.prompt} ${it.answer}</span>
+      <span class="sc-mark">${isWrong ? '✗' : '✓'}</span>
+    </button>`;
+  }).join('');
+  const wrongCount = Object.values(wrong).filter(Boolean).length;
+  const autoCorrect = 40 - wrongCount;
+  const correctVal = (pending.correct !== null && pending.correct !== undefined && pending.correct !== '')
+    ? pending.correct : autoCorrect;
+  return `
+  <div class="grade-section sprint-grading">
+    <h3>口算区 · 40 题（默认全对，点错的题）</h3>
+    <div class="sprint-grade-grid">${items}</div>
+    <div class="sprint-timing-row">
+      <label>用时（秒）<input type="number" id="sprint-seconds" min="1" value="${pending.seconds || ''}" placeholder="必填"></label>
+      <label>对题数<input type="number" id="sprint-correct" min="0" max="40" value="${correctVal}"></label>
+      <span class="sprint-auto-hint">标错 ${wrongCount} 题 · 自动对题数 ${autoCorrect}（可手改）</span>
+    </div>
+  </div>`;
+}
 
 export function renderGradingPanel(paper, existing = {}) {
   let idx = 0;

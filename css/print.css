@@ -55,4 +55,15 @@
   #print-root .q.lines .q-body { min-height: 46px; }
   #print-root .q-space { height: 62px; }
   #print-root .exam-title h1 { font-size: 20px; }
+
+  /* 口算计时页：40 题四列网格压缩，保证单页放下（内容底 ≤276mm） */
+  #print-root .sprint-grid { gap: 4px 12px; margin-top: 8px; }
+  #print-root .sprint-item { font-size: 13px; padding: 2px 0; }
+  #print-root .sprint-fields { font-size: 11px; }
+  #print-root .sprint-item, #print-root .sprint-ans-row { break-inside: avoid; page-break-inside: avoid; }
+
+  /* 错题训练册：自然多页流式（不设固定高度），组（原题+其变式）不跨页拆分 */
+  #print-root .booklet-sheet { height: auto !important; overflow: visible !important; }
+  #print-root .booklet-group { break-inside: avoid; page-break-inside: avoid; margin-bottom: 8px; }
+  #print-root .booklet-q.indent { margin-left: 18px; }
 }

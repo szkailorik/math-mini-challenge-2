@@ -1,6 +1,6 @@
 import { loadProfile, saveProfile } from './store.js';
-import { buildVariant } from './paper.js';
-import { STUDENTS, DOMAIN_LABELS } from './config.js';
+import { DOMAIN_LABELS } from './config.js';
+import { TAG_TO_SKILL, FALLBACK_SKILL } from './migrate.js';
 
 // ============ 错题录入 ============
 // gradedItems: [{ id, tag, domain, prompt, answer, hint, grade }]
@@ -26,6 +26,7 @@ export function recordGrades(studentId, setNumber, gradedItems) {
       } else {
         profile.errorBook[item.id] = {
           tag: item.tag, domain: item.domain,
+          skill: item.skill || TAG_TO_SKILL[item.tag] || FALLBACK_SKILL,
           prompt: item.prompt, answer: item.answer, hint: item.hint,
           grade: item.grade, count: 1,
           rewrongCount: 0,
@@ -104,27 +105,6 @@ export function errorBookStats(studentId, currentSet) {
     priority: active.filter((e) => e.spacing.priority && e.spacing.due).length,
     mastered: entries.length - active.length,
   };
-}
-
-// ============ 错题复练卷（原题回炉 + 同类变式，1:1） ============
-export function buildPracticePack(studentId, currentSet, mode = 'due', maxItems = 8) {
-  const level = STUDENTS[studentId].level;
-  const entries = getErrorEntries(studentId, currentSet).filter((e) => !e.mastered);
-  let picked;
-  if (mode === 'priority') picked = entries.filter((e) => e.spacing.priority);
-  else if (mode === 'all') picked = entries;
-  else picked = entries.filter((e) => e.spacing.due);
-  picked = picked.slice(0, maxItems);
-
-  const items = [];
-  for (const e of picked) {
-    items.push({ kind: 'original', entry: e, q: { id: e.id, tag: e.tag, domain: e.domain, prompt: e.prompt, answer: e.answer, hint: e.hint } });
-    const variant = buildVariant(e.domain, e.tag, level, e.id, currentSet);
-    if (variant && variant.prompt !== e.prompt) {
-      items.push({ kind: 'variant', entry: e, q: variant });
-    }
-  }
-  return { studentId, student: STUDENTS[studentId], currentSet, mode, items };
 }
 
 // ============ 复练批改回写 ============

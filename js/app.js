@@ -1,24 +1,35 @@
 import { STUDENTS, STUDENT_IDS, GRADES, DOMAIN_LABELS } from './config.js';
-import { loadState, saveState, loadProfile, saveProfile, exportAll, importAll } from './store.js';
+import { loadState, saveState, loadProfile, saveProfile, exportAll, importAll, saveSprintScore } from './store.js';
 import { buildSet, buildVariant } from './paper.js';
 import {
-  renderPaperSheets, renderAnswerSheet, renderPracticeSheets,
-  renderPracticeAnswers, renderExplainList, renderGradingPanel,
-  renderFocusSheet,
+  renderPaperSheets, renderAnswerSheet, renderExplainList, renderGradingPanel,
+  renderFocusSheet, renderSprintSheet, renderSprintGrading,
+  renderBookletSheets, renderBookletAnswers,
 } from './render.js';
 import {
   previewLevels, previewFocus, ensureStamp, updateDifficulty,
 } from './adaptive.js';
+import { buildSprintPage } from './engine/composer.js';
+import { buildBooklet } from './engine/booklet.js';
+import { recordSkillResults, recordSprintTiming, refreshStates } from './engine/mastery.js';
+import { SKILLS } from './map/skills.js';
 import { printHTML } from './print.js';
 import {
-  recordGrades, getErrorEntries, errorBookStats, buildPracticePack,
+  recordGrades, getErrorEntries, errorBookStats,
   recordPracticeResults, buildExplainList,
 } from './errorbook.js';
 import { studentSnapshot, renderDashboard } from './dashboard.js';
 import { getToken, setToken, syncNow, scheduleSync, lastSyncAt } from './sync.js';
+import { migrateProfile } from './migrate.js';
 
 const $ = (sel) => document.querySelector(sel);
+
+// 启动迁移：对本地两个 profile 各跑一次幂等 v2→v3 迁移（补 skill/mastery），
+// 在任何同步/出卷之前，保证本地形状已是 v3（合并时不丢新字段）。
+for (const id of STUDENT_IDS) saveProfile(id, migrateProfile(loadProfile(id)));
+
 const state = loadState();
+if (state.mode !== 'daily' && state.mode !== 'realistic') state.mode = 'daily';
 let activeTab = 'paper';
 let gradingStudent = 'kai';
 let errorStudent = 'kai';
@@ -26,6 +37,9 @@ let currentSetCache = null;
 const pendingGrades = { kai: {}, lorik: {} };
 const pendingPractice = { kai: {}, lorik: {} };
 const pendingFocus = { kai: {}, lorik: {} }; // 批阅页第七区标记：key = entryId|kind|序号
+const blankSprint = () => ({ wrong: {}, seconds: '', correct: null });
+const pendingSprint = { kai: blankSprint(), lorik: blankSprint() }; // 批阅页口算区：wrong=标错索引集合
+let currentBooklet = null; // 错题本快速出册预览：{ filter, booklet } | null（未出册）
 
 function levelsProvider(studentId) {
   return (setNumber) => previewLevels(studentId, setNumber);
@@ -70,10 +84,16 @@ function switchTab(tab) {
 }
 
 function renderActive() {
+  updateModeButtons();
   if (activeTab === 'paper') renderPaperTab();
   else if (activeTab === 'grading') renderGradingTab();
   else if (activeTab === 'errorbook') renderErrorTab();
   else if (activeTab === 'dashboard') renderDashboardTab();
+}
+
+function updateModeButtons() {
+  document.querySelectorAll('.mode-btn').forEach((b) =>
+    b.classList.toggle('on', b.dataset.mode === state.mode));
 }
 
 // ================= 试卷页 =================
@@ -84,10 +104,13 @@ function renderPaperTab() {
   $('#paper-preview').innerHTML = preview;
 }
 
-// 学员完整卷面 HTML：2 页正卷 +（有到期错题时）第 3 页回炉附加页
+// 学员完整卷面 HTML：（日课模式）口算计时页 + 2 页正卷 +（有到期错题时）第 3 页回炉附加页
 function studentPapersHTML(paper) {
   const focus = focusQuestionsFor(paper.studentId, paper.setNumber);
-  return renderPaperSheets(paper) + renderFocusSheet(paper, focus.questions, focus.band);
+  const sprintHTML = state.mode === 'daily'
+    ? renderSprintSheet(paper, buildSprintPage(paper.studentId, paper.setNumber))
+    : '';
+  return sprintHTML + renderPaperSheets(paper) + renderFocusSheet(paper, focus.questions, focus.band);
 }
 
 function changeSet(delta) {
@@ -96,6 +119,8 @@ function changeSet(delta) {
   currentSetCache = null;
   pendingGrades.kai = {}; pendingGrades.lorik = {};
   pendingFocus.kai = {}; pendingFocus.lorik = {};
+  pendingSprint.kai = blankSprint(); pendingSprint.lorik = blankSprint();
+  currentBooklet = null;
   renderActive();
   afterDataChange();
 }
@@ -111,7 +136,10 @@ function renderGradingTab() {
     : `第 ${state.currentSet} 套 · ${STUDENTS[gradingStudent].label} · 默认全对，只需点错题`;
   document.querySelectorAll('#panel-grading .student-btn').forEach((b) =>
     b.classList.toggle('on', b.dataset.student === gradingStudent));
-  $('#grading-list').innerHTML = renderGradingPanel(paper, pendingGrades[gradingStudent])
+  const sprintHTML = state.mode === 'daily'
+    ? renderSprintGrading(buildSprintPage(gradingStudent, state.currentSet), pendingSprint[gradingStudent])
+    : '';
+  $('#grading-list').innerHTML = sprintHTML + renderGradingPanel(paper, pendingGrades[gradingStudent])
     + renderFocusGrading();
 }
 
@@ -140,8 +168,40 @@ function renderFocusGrading() {
   return `<div class="grade-section focus-grading"><h3>七、错题回炉（附加）</h3>${rows}</div>`;
 }
 
+// 口算区提交前校验并打包：用时秒数必填；对题数默认=40-标错数，可手改。
+// 返回 null 且已 alert 提示时，调用方应中止整个批阅提交（避免部分录入）。
+function prepareSprintSubmission() {
+  const secInput = $('#sprint-seconds');
+  const correctInput = $('#sprint-correct');
+  const seconds = Number(secInput?.value);
+  if (!secInput || !seconds || seconds <= 0) {
+    alert('请先填写口算区「用时（秒）」再提交');
+    secInput?.focus();
+    return null;
+  }
+  const pending = pendingSprint[gradingStudent];
+  const wrongCount = Object.values(pending.wrong || {}).filter(Boolean).length;
+  const autoCorrect = 40 - wrongCount;
+  const correctRaw = correctInput?.value;
+  const correct = correctRaw !== undefined && correctRaw !== '' ? Number(correctRaw) : autoCorrect;
+  if (!Number.isFinite(correct) || correct < 0 || correct > 40) {
+    alert('对题数需在 0-40 之间');
+    correctInput?.focus();
+    return null;
+  }
+  const sprint = buildSprintPage(gradingStudent, state.currentSet);
+  const results = sprint.items.map((it, i) => ({ skill: it.skill, correct: !pending.wrong[i] }));
+  const skills = [...new Set(sprint.items.map((it) => it.skill))]; // 本页去重技能列表（第4参硬性契约）
+  return { results, skills, timing: { seconds, total: 40, correct } };
+}
+
 function submitGrades() {
   ensureStamp(gradingStudent, state.currentSet); // 没打印直接批（线上做题）也要固化参数
+  let sprintSubmission = null;
+  if (state.mode === 'daily') {
+    sprintSubmission = prepareSprintSubmission();
+    if (!sprintSubmission) return; // 用时未填：中止整个提交，避免主题区/口算区数据不一致
+  }
   const set = getSet();
   const paper = set.papers[gradingStudent];
   const items = [];
@@ -174,11 +234,26 @@ function submitGrades() {
   const deltas = updateDifficulty(gradingStudent, profile);
   saveProfile(gradingStudent, profile);
 
+  // 口算区：走 mastery 契约链（与主题区 recordGrades 完全独立）
+  let sprintMsg = '';
+  if (sprintSubmission) {
+    recordSkillResults(gradingStudent, state.currentSet, sprintSubmission.results);
+    recordSprintTiming(gradingStudent, state.currentSet, sprintSubmission.timing, sprintSubmission.skills);
+    refreshStates(gradingStudent);
+    saveSprintScore(gradingStudent, {
+      set: state.currentSet, seconds: sprintSubmission.timing.seconds,
+      correct: sprintSubmission.timing.correct, total: 40,
+    });
+    sprintMsg = `口算 ${sprintSubmission.timing.correct}/40 · 用时 ${sprintSubmission.timing.seconds} 秒已录入。`;
+    pendingSprint[gradingStudent] = blankSprint();
+  }
+
   const wrong = items.filter((i) => i.grade !== 'right').length;
   const deltaMsg = Object.entries(deltas)
     .map(([d, v]) => `${DOMAIN_LABELS[d]}${v > 0 ? '↑' : '↓'}`).join(' ');
   alert(`${STUDENTS[gradingStudent].name} 第 ${state.currentSet} 套已录入：${items.length - wrong} 对 / ${wrong} 需关注。`
     + (focusQs.length ? `回炉 ${focusQs.length} 题已回写。` : '')
+    + sprintMsg
     + (deltaMsg ? `\n难度调整：${deltaMsg}` : ''));
   pendingGrades[gradingStudent] = {};
   pendingFocus[gradingStudent] = {};
@@ -187,10 +262,85 @@ function submitGrades() {
   afterDataChange();
 }
 
+// ================= 错题本页 · 快速出册 =================
+function populateDomainSelects() {
+  const opts = Object.entries(DOMAIN_LABELS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
+  const freeSel = $('#free-domain');
+  if (freeSel) freeSel.innerHTML = `<option value="">全部技能域</option>${opts}`;
+}
+
+// 「按技能专项」下拉：按当前学员错题本中实际出现过的 skill 填充（去重排序），
+// label 用 SKILLS[id]?.label 兜底 id。空错题本时给占位项。
+function populateSkillSelect(studentId) {
+  const sel = $('#preset-skill-domain');
+  if (!sel) return;
+  const profile = loadProfile(studentId);
+  const skills = [...new Set(Object.values(profile.errorBook || {})
+    .map((e) => e.skill).filter(Boolean))].sort();
+  sel.innerHTML = skills.length
+    ? skills.map((id) => `<option value="${id}">${SKILLS[id]?.label || id}</option>`).join('')
+    : '<option value="">（错题本暂无技能标注）</option>';
+}
+
+function buildAndPreviewBooklet(filter) {
+  const booklet = buildBooklet(errorStudent, state.currentSet, filter);
+  currentBooklet = { filter, booklet };
+  renderBookletPreview();
+}
+
+function renderBookletPreview() {
+  const el = $('#booklet-preview');
+  if (!el) return;
+  if (!currentBooklet) {
+    el.innerHTML = '<p class="note booklet-hint">点击上方预设按钮，或展开「自由筛选」出一册训练题</p>';
+    return;
+  }
+  const { booklet } = currentBooklet;
+  if (booklet.empty) {
+    el.innerHTML = '<div class="booklet-panel"><p class="empty">没有匹配的错题 —— 换个预设或调整筛选条件试试</p></div>';
+    return;
+  }
+  const student = STUDENTS[errorStudent];
+  el.innerHTML = `
+    <div class="booklet-panel">
+      <div class="booklet-panel-head">
+        <h3>${booklet.title}<span class="booklet-count">共 ${booklet.items.length} 题</span></h3>
+        <button class="tool-btn primary" id="booklet-print">🖨 打印这册（含答案页）</button>
+      </div>
+      <div class="booklet-preview-sheets">${renderBookletSheets(student, booklet)}</div>
+    </div>`;
+}
+
+// 把本次出册消耗的变式指纹并入对应错题条目的 variantHistory（按 entryId 去重合并），
+// 保证下次再出同 preset 的册不会重复出一模一样的变式题。只在真正打印时调用（预览不消耗）。
+function commitBookletFingerprints(studentId, fingerprints) {
+  if (!fingerprints || !Object.keys(fingerprints).length) return;
+  const profile = loadProfile(studentId);
+  for (const [entryId, fps] of Object.entries(fingerprints)) {
+    const e = profile.errorBook[entryId];
+    if (!e) continue;
+    if (!Array.isArray(e.variantHistory)) e.variantHistory = [];
+    for (const fp of fps) if (!e.variantHistory.includes(fp)) e.variantHistory.push(fp);
+  }
+  saveProfile(studentId, profile);
+}
+
+function printBooklet() {
+  if (!currentBooklet || currentBooklet.booklet.empty) return;
+  const { booklet } = currentBooklet;
+  const student = STUDENTS[errorStudent];
+  const html = renderBookletSheets(student, booklet) + renderBookletAnswers(booklet);
+  printHTML(html, booklet.title);
+  commitBookletFingerprints(errorStudent, booklet.fingerprints);
+  afterDataChange();
+}
+
 // ================= 错题本页 =================
 function renderErrorTab() {
   document.querySelectorAll('#panel-errorbook .student-btn').forEach((b) =>
     b.classList.toggle('on', b.dataset.student === errorStudent));
+  populateSkillSelect(errorStudent);
+  renderBookletPreview();
   const stats = errorBookStats(errorStudent, state.currentSet);
   $('#eb-stats').innerHTML = `
     <span>活跃错题 <b>${stats.active}</b></span>
@@ -301,25 +451,17 @@ const printActions = {
     const set = getSet();
     const html = STUDENT_IDS.map((id) => {
       const focus = focusQuestionsFor(id, state.currentSet);
-      return renderAnswerSheet(set.papers[id], focus.questions);
+      const sprint = state.mode === 'daily' ? buildSprintPage(id, state.currentSet) : null;
+      return renderAnswerSheet(set.papers[id], focus.questions, sprint);
     }).join('');
     printHTML(html, `第${state.currentSet}套-答案`);
   },
-  'print-eb-due': () => printPractice('due'),
-  'print-eb-priority': () => printPractice('priority'),
-  'print-eb-all': () => printPractice('all'),
   'print-explain': () => {
     const groups = buildExplainList(errorStudent, state.currentSet);
     if (!groups.length) { alert('当前没有「需讲解 / 复错」的题'); return; }
     printHTML(renderExplainList(STUDENTS[errorStudent].label, groups), `讲解清单-${STUDENTS[errorStudent].name}`);
   },
 };
-
-function printPractice(mode) {
-  const pack = buildPracticePack(errorStudent, state.currentSet, mode);
-  if (!pack.items.length) { alert('该类别下暂无错题可打印'); return; }
-  printHTML(renderPracticeSheets(pack) + renderPracticeAnswers(pack), `错题复练-${STUDENTS[errorStudent].name}`);
-}
 
 // ================= 事件绑定 =================
 function bind() {
@@ -329,15 +471,52 @@ function bind() {
   $('#set-prev').addEventListener('click', () => changeSet(-1));
   $('#set-next').addEventListener('click', () => changeSet(1));
 
+  document.querySelectorAll('.mode-btn').forEach((b) =>
+    b.addEventListener('click', () => {
+      if (state.mode === b.dataset.mode) return;
+      state.mode = b.dataset.mode;
+      saveState(state);
+      currentSetCache = null;
+      renderActive();
+    }));
+
   document.querySelectorAll('[data-print]').forEach((b) =>
     b.addEventListener('click', () => printActions[b.dataset.print]?.()));
 
   document.querySelectorAll('#panel-grading .student-btn').forEach((b) =>
     b.addEventListener('click', () => { gradingStudent = b.dataset.student; renderGradingTab(); }));
   document.querySelectorAll('#panel-errorbook .student-btn').forEach((b) =>
-    b.addEventListener('click', () => { errorStudent = b.dataset.student; renderErrorTab(); }));
+    b.addEventListener('click', () => { errorStudent = b.dataset.student; currentBooklet = null; renderErrorTab(); }));
+
+  populateDomainSelects();
+  document.querySelectorAll('.preset-btn').forEach((b) =>
+    b.addEventListener('click', () => {
+      const preset = b.dataset.preset;
+      const filter = preset === 'skill'
+        ? { preset: 'skill', skill: $('#preset-skill-domain').value || undefined }
+        : { preset };
+      buildAndPreviewBooklet(filter);
+    }));
+  $('#free-build').addEventListener('click', () => {
+    const domain = $('#free-domain').value || undefined;
+    const sinceRaw = $('#free-since').value;
+    const sinceDays = sinceRaw !== '' ? Number(sinceRaw) : undefined;
+    const includeMastered = $('#free-mastered').checked;
+    buildAndPreviewBooklet({ preset: null, domain, sinceDays, includeMastered });
+  });
+  $('#booklet-preview').addEventListener('click', (ev) => {
+    if (ev.target.closest('#booklet-print')) printBooklet();
+  });
 
   $('#grading-list').addEventListener('click', (ev) => {
+    const sc = ev.target.closest('.sprint-cell');
+    if (sc) {
+      const idx = Number(sc.dataset.sidx);
+      const wrong = pendingSprint[gradingStudent].wrong;
+      if (wrong[idx]) delete wrong[idx]; else wrong[idx] = true;
+      renderGradingTab(); // 重渲染以刷新「标错/自动对题数」提示
+      return;
+    }
     const fbtn = ev.target.closest('.eb-btn[data-fkey]');
     if (fbtn) {
       pendingFocus[gradingStudent][fbtn.dataset.fkey] = fbtn.dataset.outcome;
@@ -351,9 +530,17 @@ function bind() {
     const row = btn.closest('.grade-row');
     row.querySelectorAll('.grade-btn').forEach((b) => b.classList.toggle('on', b === btn));
   });
+  // 口算区用时/对题数输入：随打随存，避免标错题触发的重渲染丢失已填值
+  $('#grading-list').addEventListener('input', (ev) => {
+    if (ev.target.id === 'sprint-seconds') pendingSprint[gradingStudent].seconds = ev.target.value;
+    else if (ev.target.id === 'sprint-correct') {
+      pendingSprint[gradingStudent].correct = ev.target.value === '' ? null : ev.target.value;
+    }
+  });
   $('#grade-submit').addEventListener('click', submitGrades);
   $('#grade-all-right').addEventListener('click', () => {
     pendingGrades[gradingStudent] = {};
+    if (state.mode === 'daily') pendingSprint[gradingStudent] = blankSprint();
     renderGradingTab();
   });
 

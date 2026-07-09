@@ -34,12 +34,16 @@
   <!-- 试卷 -->
   <main id="panel-paper" class="tab-panel on">
     <div class="toolbar">
-      <button class="tool-btn primary" data-print="print-papers">🖨 打印双人四页</button>
+      <div class="mode-switch">
+        <button class="tool-btn mode-btn" data-mode="daily">📅 日课模式</button>
+        <button class="tool-btn mode-btn" data-mode="realistic">🎯 拟真模式</button>
+      </div>
+      <button class="tool-btn primary" data-print="print-papers">🖨 打印双人套卷</button>
       <button class="tool-btn" data-print="print-papers-kai">只印 KAI</button>
       <button class="tool-btn" data-print="print-papers-lorik">只印 Lorik</button>
       <button class="tool-btn answer" data-print="print-answers">🗝 打印答案批阅页</button>
     </div>
-    <p class="note">同一套号永远生成同一份试卷（可随时补打）。换 <b>＋/−</b> 出新一套。屏幕预览即打印效果。</p>
+    <p class="note">同一套号永远生成同一份试卷（可随时补打）。换 <b>＋/−</b> 出新一套。屏幕预览即打印效果。<b>日课模式</b>=口算计时页+现有两页+按需回炉页；<b>拟真模式</b>=现有两页+按需回炉页。</p>
     <div id="paper-preview" class="preview"></div>
   </main>
 
@@ -62,12 +66,32 @@
       <button class="student-btn on" data-student="kai">KAI</button>
       <button class="student-btn" data-student="lorik">Lorik</button>
       <span class="spacer"></span>
-      <button class="tool-btn primary" data-print="print-eb-due">🖨 到期复练卷</button>
-      <button class="tool-btn" data-print="print-eb-priority">复错优先卷</button>
-      <button class="tool-btn" data-print="print-eb-all">全部错题卷</button>
       <button class="tool-btn answer" data-print="print-explain">📋 讲解清单</button>
       <button class="tool-btn primary" id="eb-submit">回写复练结果</button>
     </div>
+
+    <div class="booklet-quick">
+      <div class="preset-row">
+        <button class="preset-btn" data-preset="due">📄 到期复练</button>
+        <button class="preset-btn" data-preset="priority">🔁 复错优先</button>
+        <button class="preset-btn" data-preset="week">📅 本周周清</button>
+        <div class="preset-skill">
+          <button class="preset-btn" data-preset="skill">🎯 按技能专项</button>
+          <select id="preset-skill-domain" class="skill-select"></select>
+        </div>
+      </div>
+      <details class="booklet-free">
+        <summary>自由筛选</summary>
+        <div class="free-filter-row">
+          <select id="free-domain"></select>
+          <label>时间窗（天）<input type="number" id="free-since" min="1" placeholder="不限"></label>
+          <label class="chk"><input type="checkbox" id="free-mastered"> 含已掌握</label>
+          <button class="tool-btn primary" id="free-build">出册</button>
+        </div>
+      </details>
+      <div id="booklet-preview" class="booklet-preview"></div>
+    </div>
+
     <div id="eb-stats" class="eb-stats"></div>
     <div id="eb-list"></div>
   </main>

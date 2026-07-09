@@ -43,10 +43,22 @@ export function saveState(state) { write('state', state); }
 export function loadStamps() { return read('stamps', {}) || {}; }
 export function saveStamps(stamps) { write('stamps', stamps); }
 
+// 掌握度状态机存储（每学员一份 { [skillId]: Entry }，模式同 stamps）
+export function loadMastery(studentId) { return read(`mastery_${studentId}`, {}) || {}; }
+export function saveMastery(studentId, mastery) { write(`mastery_${studentId}`, mastery); }
+
+// 口算计时页上一次成绩（每学员一份 { set, seconds, correct, total }，模式同 mastery）
+export function loadSprintScore(studentId) { return read(`sprint_score_${studentId}`, null); }
+export function saveSprintScore(studentId, score) { write(`sprint_score_${studentId}`, score); }
+
 // 全量导出/导入（换设备迁移用；无需服务器）
 export function exportAll() {
   const dump = { version: APP_VERSION, exportedAt: new Date().toISOString(), state: loadState() };
-  for (const id of STUDENT_IDS) dump[`profile_${id}`] = loadProfile(id);
+  for (const id of STUDENT_IDS) {
+    dump[`profile_${id}`] = loadProfile(id);
+    dump[`mastery_${id}`] = loadMastery(id);
+    dump[`sprint_score_${id}`] = loadSprintScore(id);
+  }
   return JSON.stringify(dump, null, 2);
 }
 
@@ -55,6 +67,8 @@ export function importAll(json) {
   if (!dump || typeof dump !== 'object') throw new Error('无效的备份文件');
   for (const id of STUDENT_IDS) {
     if (dump[`profile_${id}`]) write(`profile_${id}`, dump[`profile_${id}`]);
+    if (dump[`mastery_${id}`]) write(`mastery_${id}`, dump[`mastery_${id}`]);
+    if (dump[`sprint_score_${id}`]) write(`sprint_score_${id}`, dump[`sprint_score_${id}`]);
   }
   if (dump.state) write('state', dump.state);
 }
