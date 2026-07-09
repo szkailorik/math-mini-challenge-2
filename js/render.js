@@ -222,56 +222,6 @@ export function renderFocusAnswers(focusQuestions) {
     </div>`;
 }
 
-// ================= 错题复练卷 =================
-
-export function renderPracticeSheets(pack) {
-  const modeLabel = { due: '到期复练', priority: '复错优先', all: '全部错题' }[pack.mode] || '复练';
-  if (!pack.items.length) return '';
-  const qs = pack.items.map((item, i) => `
-    <div class="q lines practice-q ${item.kind}">
-      <span class="q-no">${i + 1}.</span>
-      <div class="q-body">
-        <div class="q-prompt">${item.q.prompt}</div>
-        <div class="practice-meta">
-          <span class="p-kind">${item.kind === 'original' ? '回炉' : '变式'}</span>
-          <span class="p-domain">${DOMAIN_LABELS[item.entry.domain] || item.entry.domain}</span>
-          <span class="p-mark">□已会 □又错 □需讲解</span>
-        </div>
-      </div>
-    </div>`).join('');
-  return `
-  <article class="sheet practice-sheet">
-    <header class="exam-head">
-      <div class="exam-title-row">
-        <div class="exam-badge">${pack.student.name}</div>
-        <div class="exam-title">
-          <h1>错题复练卷 · ${modeLabel}</h1>
-          <p class="exam-sub">${pack.student.label} · 生成于第 ${pack.currentSet} 套 · 原题回炉 + 同类变式</p>
-        </div>
-      </div>
-      <div class="exam-fields"><span>日期：<i></i></span><span>用时：<i></i></span></div>
-    </header>
-    <div class="q-list lines">${qs}</div>
-    <footer class="sheet-foot"><span>做完由家长按 □ 勾选，再回系统「错题本」录入</span></footer>
-  </article>`;
-}
-
-export function renderPracticeAnswers(pack) {
-  const rows = pack.items.map((item, i) => `
-    <div class="ans-row">
-      <span class="ans-no">${i + 1}</span>
-      <span class="ans-val">${item.q.answer}</span>
-      <span class="ans-hint">${item.q.hint || ''}</span>
-    </div>`).join('');
-  return `
-  <article class="sheet ans-sheet">
-    <header class="ans-head">
-      <h2>错题复练卷 · 参考答案 · ${pack.student.label}</h2>
-    </header>
-    <div class="ans-columns"><div class="ans-section">${rows}</div></div>
-  </article>`;
-}
-
 // ================= 错题训练册（快速出卷·双通道） =================
 // 每条错题一组：原题（回炉）+ 阶梯变式（变式/变式+/对比），组内不跨页。
 

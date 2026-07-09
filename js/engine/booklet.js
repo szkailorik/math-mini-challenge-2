@@ -7,6 +7,7 @@ import { buildVariant } from '../paper.js';
 import { makeRng, fnv1a } from '../rng.js';
 import { STUDENTS } from '../config.js';
 import { TAG_TO_SKILL } from '../migrate.js';
+import { SKILLS } from '../map/skills.js';
 
 const DEFAULT_MAX = 12;
 const RETRY_LIMIT = 6;
@@ -30,8 +31,10 @@ function daysBetween(a, b) {
 }
 
 function matchesSkill(entry, filter) {
+  // filter.skill 缺失时回落 domain 匹配（防御：不因缺字段恒 false 出空册）
+  if (!filter.skill) return filter.domain ? entry.domain === filter.domain : false;
   if (entry.skill) return entry.skill === filter.skill;
-  const mapped = TAG_SKILL_MAP[entry.tag] || TAG_SKILL_MAP[String(entry.tag || '').split('.')[0]];
+  const mapped = TAG_SKILL_MAP[entry.tag];
   if (mapped) return mapped === filter.skill;
   return filter.domain ? entry.domain === filter.domain : false;
 }
@@ -121,7 +124,7 @@ const PRESET_TITLE = {
 function titleFor(filter, studentId, currentSet) {
   const key = filter.preset || 'null';
   let base = PRESET_TITLE[key] || '错题精选';
-  if (filter.preset === 'skill' && filter.skill) base = `专项 · ${filter.skill}`;
+  if (filter.preset === 'skill' && filter.skill) base = `专项 · ${SKILLS[filter.skill]?.label || filter.skill}`;
   return `${base} · ${STUDENTS[studentId].name} · 第${currentSet}套`;
 }
 

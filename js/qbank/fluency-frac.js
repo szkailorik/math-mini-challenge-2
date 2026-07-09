@@ -122,8 +122,10 @@ const decFracBaseCore = defineQModel({
       const fr = F(n, d);
       const dir = rng.pick(DFB_DIRS);
       const R = dfbReprs(fr);
-      // 反向填空：给出目标形式，倒推出发形式，考的是"互化"而不是单向记忆
-      return { prompt: `( ) = ${R[dir.to]}`, answer: R[dir.from], hint: dfbHint(dir, fr), work: 'inline' };
+      // 反向填空：给出目标形式，倒推出发形式，考的是"互化"而不是单向记忆。
+      // 题面按答案实际形式动态说明目标形式（答案是 R[dir.from]，避免学生填错表示法）。
+      const askLabel = { frac: '用最简分数表示', dec: '用小数表示', pct: '用百分数表示' }[dir.from];
+      return { prompt: `${askLabel}：( ) = ${R[dir.to]}`, answer: R[dir.from], hint: dfbHint(dir, fr), work: 'inline' };
     }
     return this.generate(rng);
   },

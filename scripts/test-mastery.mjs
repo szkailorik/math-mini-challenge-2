@@ -48,7 +48,7 @@ ok(getMastery('lorik').sub20.hits.length === 20, '25 题只留 20');
 ok(getMastery('lorik').sub20.hits.every((h) => h === 0), '窗口全为最近的 0');
 recordSkillResults('lorik', 2, Array.from({ length: 20 }, () => ({ skill: 'sub20', correct: true })));
 ok(getMastery('lorik').sub20.hits.every((h) => h === 1), '20 个新 1 挤掉旧 0（滑动）');
-ok(getMastery('lorik').sub20.streakWrong === 0, '连对清零 streakWrong');
+ok(!('streakWrong' in getMastery('lorik').sub20), 'Entry 不再写 streakWrong 字段');
 
 // ---- accuracy 窗口不足返回 null ----
 reset();

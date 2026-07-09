@@ -34,7 +34,7 @@ function newer(a, b) {
   return String(a.lastDate || '') >= String(b.lastDate || '') ? a : b;
 }
 
-function mergeEntry(a, b) {
+export function mergeEntry(a, b) {
   const base = { ...newer(a, b) };
   base.count = Math.max(a.count || 0, b.count || 0);
   base.rewrongCount = Math.max(a.rewrongCount || 0, b.rewrongCount || 0);
@@ -44,6 +44,12 @@ function mergeEntry(a, b) {
   // v3 skill 字段：newer 一方缺失时从另一方补回，避免合并丢失技能归类
   const skill = base.skill ?? a.skill ?? b.skill;
   if (skill != null) base.skill = skill;
+  // 变式指纹并集：任一方有值即合并去重排序（保字节稳定）；双方都无则不写键（幂等）
+  if (a.variantHistory || b.variantHistory) {
+    base.variantHistory = [...new Set([...(a.variantHistory || []), ...(b.variantHistory || [])])].sort();
+  } else {
+    delete base.variantHistory;
+  }
   return base;
 }
 

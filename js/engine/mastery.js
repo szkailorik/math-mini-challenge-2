@@ -9,7 +9,7 @@ const MIN_SAMPLES = 10;    // accuracy 有效样本下限
 const REVISIT_GAP = 4;     // maintain 距上次 ≥ 此值 → 到期回访
 
 function blankEntry() {
-  return { hits: [], speedOk: false, state: 'learning', lastSet: 0, streakWrong: 0 };
+  return { hits: [], speedOk: false, state: 'learning', lastSet: 0 };
 }
 
 function ensure(mastery, skillId) {
@@ -30,12 +30,7 @@ export function recordSkillResults(studentId, setNumber, results) {
     e.hits.push(correct ? 1 : 0);
     if (e.hits.length > WINDOW) e.hits = e.hits.slice(-WINDOW); // 滑动裁剪：新进旧出
     e.lastSet = setNumber;
-    if (correct) {
-      e.streakWrong = 0;
-    } else {
-      e.streakWrong += 1;
-      if (e.state === 'maintain') { e.state = 'learning'; e.speedOk = false; }
-    }
+    if (!correct && e.state === 'maintain') { e.state = 'learning'; e.speedOk = false; }
   }
   saveMastery(studentId, mastery);
 }

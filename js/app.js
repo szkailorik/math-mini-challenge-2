@@ -2,8 +2,7 @@ import { STUDENTS, STUDENT_IDS, GRADES, DOMAIN_LABELS } from './config.js';
 import { loadState, saveState, loadProfile, saveProfile, exportAll, importAll, saveSprintScore } from './store.js';
 import { buildSet, buildVariant } from './paper.js';
 import {
-  renderPaperSheets, renderAnswerSheet, renderPracticeSheets,
-  renderPracticeAnswers, renderExplainList, renderGradingPanel,
+  renderPaperSheets, renderAnswerSheet, renderExplainList, renderGradingPanel,
   renderFocusSheet, renderSprintSheet, renderSprintGrading,
   renderBookletSheets, renderBookletAnswers,
 } from './render.js';
@@ -13,9 +12,10 @@ import {
 import { buildSprintPage } from './engine/composer.js';
 import { buildBooklet } from './engine/booklet.js';
 import { recordSkillResults, recordSprintTiming, refreshStates } from './engine/mastery.js';
+import { SKILLS } from './map/skills.js';
 import { printHTML } from './print.js';
 import {
-  recordGrades, getErrorEntries, errorBookStats, buildPracticePack,
+  recordGrades, getErrorEntries, errorBookStats,
   recordPracticeResults, buildExplainList,
 } from './errorbook.js';
 import { studentSnapshot, renderDashboard } from './dashboard.js';
@@ -265,10 +265,21 @@ function submitGrades() {
 // ================= 错题本页 · 快速出册 =================
 function populateDomainSelects() {
   const opts = Object.entries(DOMAIN_LABELS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
-  const skillSel = $('#preset-skill-domain');
   const freeSel = $('#free-domain');
-  if (skillSel) skillSel.innerHTML = opts;
   if (freeSel) freeSel.innerHTML = `<option value="">全部技能域</option>${opts}`;
+}
+
+// 「按技能专项」下拉：按当前学员错题本中实际出现过的 skill 填充（去重排序），
+// label 用 SKILLS[id]?.label 兜底 id。空错题本时给占位项。
+function populateSkillSelect(studentId) {
+  const sel = $('#preset-skill-domain');
+  if (!sel) return;
+  const profile = loadProfile(studentId);
+  const skills = [...new Set(Object.values(profile.errorBook || {})
+    .map((e) => e.skill).filter(Boolean))].sort();
+  sel.innerHTML = skills.length
+    ? skills.map((id) => `<option value="${id}">${SKILLS[id]?.label || id}</option>`).join('')
+    : '<option value="">（错题本暂无技能标注）</option>';
 }
 
 function buildAndPreviewBooklet(filter) {
@@ -328,6 +339,7 @@ function printBooklet() {
 function renderErrorTab() {
   document.querySelectorAll('#panel-errorbook .student-btn').forEach((b) =>
     b.classList.toggle('on', b.dataset.student === errorStudent));
+  populateSkillSelect(errorStudent);
   renderBookletPreview();
   const stats = errorBookStats(errorStudent, state.currentSet);
   $('#eb-stats').innerHTML = `
@@ -444,21 +456,12 @@ const printActions = {
     }).join('');
     printHTML(html, `第${state.currentSet}套-答案`);
   },
-  'print-eb-due': () => printPractice('due'),
-  'print-eb-priority': () => printPractice('priority'),
-  'print-eb-all': () => printPractice('all'),
   'print-explain': () => {
     const groups = buildExplainList(errorStudent, state.currentSet);
     if (!groups.length) { alert('当前没有「需讲解 / 复错」的题'); return; }
     printHTML(renderExplainList(STUDENTS[errorStudent].label, groups), `讲解清单-${STUDENTS[errorStudent].name}`);
   },
 };
-
-function printPractice(mode) {
-  const pack = buildPracticePack(errorStudent, state.currentSet, mode);
-  if (!pack.items.length) { alert('该类别下暂无错题可打印'); return; }
-  printHTML(renderPracticeSheets(pack) + renderPracticeAnswers(pack), `错题复练-${STUDENTS[errorStudent].name}`);
-}
 
 // ================= 事件绑定 =================
 function bind() {
@@ -490,7 +493,7 @@ function bind() {
     b.addEventListener('click', () => {
       const preset = b.dataset.preset;
       const filter = preset === 'skill'
-        ? { preset: 'skill', domain: $('#preset-skill-domain').value }
+        ? { preset: 'skill', skill: $('#preset-skill-domain').value || undefined }
         : { preset };
       buildAndPreviewBooklet(filter);
     }));

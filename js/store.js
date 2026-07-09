@@ -54,7 +54,11 @@ export function saveSprintScore(studentId, score) { write(`sprint_score_${studen
 // 全量导出/导入（换设备迁移用；无需服务器）
 export function exportAll() {
   const dump = { version: APP_VERSION, exportedAt: new Date().toISOString(), state: loadState() };
-  for (const id of STUDENT_IDS) dump[`profile_${id}`] = loadProfile(id);
+  for (const id of STUDENT_IDS) {
+    dump[`profile_${id}`] = loadProfile(id);
+    dump[`mastery_${id}`] = loadMastery(id);
+    dump[`sprint_score_${id}`] = loadSprintScore(id);
+  }
   return JSON.stringify(dump, null, 2);
 }
 
@@ -63,6 +67,8 @@ export function importAll(json) {
   if (!dump || typeof dump !== 'object') throw new Error('无效的备份文件');
   for (const id of STUDENT_IDS) {
     if (dump[`profile_${id}`]) write(`profile_${id}`, dump[`profile_${id}`]);
+    if (dump[`mastery_${id}`]) write(`mastery_${id}`, dump[`mastery_${id}`]);
+    if (dump[`sprint_score_${id}`]) write(`sprint_score_${id}`, dump[`sprint_score_${id}`]);
   }
   if (dump.state) write('state', dump.state);
 }

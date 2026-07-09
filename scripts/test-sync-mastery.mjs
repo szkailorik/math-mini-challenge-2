@@ -7,12 +7,12 @@ globalThis.localStorage = {
   removeItem: (k) => mem.delete(k),
 };
 
-const { mergeMastery } = await import('../js/sync.js');
+const { mergeMastery, mergeEntry } = await import('../js/sync.js');
 
 let fails = 0;
 const ok = (cond, msg) => { if (!cond) { fails++; console.error('  ✗', msg); } else console.log('  ✓', msg); };
 
-const entry = (over = {}) => ({ hits: [1, 1, 0], speedOk: true, state: 'learning', lastSet: 1, streakWrong: 0, ...over });
+const entry = (over = {}) => ({ hits: [1, 1, 0], speedOk: true, state: 'learning', lastSet: 1, ...over });
 
 console.log('mergeMastery：lastSet 新者胜');
 {
@@ -69,6 +69,33 @@ console.log('mergeMastery：键排序输出（字节稳定）');
   const local = { sub100: entry({ lastSet: 1 }), add100: entry({ lastSet: 1 }) };
   const merged = mergeMastery(local, {});
   ok(JSON.stringify(Object.keys(merged)) === JSON.stringify(['add100', 'sub100']), '输出键按字典序排序');
+}
+
+// ---- mergeEntry：变式指纹并集 + 对称 + 幂等 ----
+const ebEntry = (over = {}) => ({ count: 1, rewrongCount: 0, needsExplainCount: 0, lastSet: 1, lastDate: '2026-01-01', ...over });
+console.log('mergeEntry：variantHistory 并集');
+{
+  const a = ebEntry({ variantHistory: ['x1', 'x3'] });
+  const b = ebEntry({ variantHistory: ['x2', 'x1'] });
+  const m = mergeEntry(a, b);
+  ok(JSON.stringify(m.variantHistory) === JSON.stringify(['x1', 'x2', 'x3']), '并集去重且排序');
+}
+console.log('mergeEntry：对称（字节级）');
+{
+  const a = ebEntry({ lastSet: 2, variantHistory: ['b', 'a'] });
+  const b = ebEntry({ lastSet: 5, variantHistory: ['c', 'a'] });
+  ok(JSON.stringify(mergeEntry(a, b).variantHistory) === JSON.stringify(mergeEntry(b, a).variantHistory), 'A合B 与 B合A 的 variantHistory 全等');
+}
+console.log('mergeEntry：单侧有值');
+{
+  const a = ebEntry({ variantHistory: ['a', 'b'] });
+  const b = ebEntry({});
+  ok(JSON.stringify(mergeEntry(a, b).variantHistory) === JSON.stringify(['a', 'b']), '仅一方有值时并集即该方去重排序');
+}
+console.log('mergeEntry：双方都无 → 不写键（幂等）');
+{
+  const m = mergeEntry(ebEntry({}), ebEntry({}));
+  ok(!('variantHistory' in m), '双方都无 variantHistory 时不写该键');
 }
 
 console.log(fails === 0 ? '\n✅ test-sync-mastery 全部通过' : `\n❌ ${fails} 项失败`);

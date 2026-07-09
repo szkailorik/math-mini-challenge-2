@@ -20,7 +20,7 @@ const reset = () => mem.clear();
 const BAD_STRINGS = ['NaN', 'Infinity', 'undefined', 'null', '[object'];
 const FLU = ['add20', 'sub20', 'mult_table', 'div_table', 'add100', 'sub100',
   'mult_pairs', 'dec_shift', 'dec_frac_base', 'frac_same_denom', 'square_base', 'estimate_flash'];
-const entry = (state, lastSet = 0) => ({ hits: [], speedOk: state === 'maintain', state, lastSet, streakWrong: 0 });
+const entry = (state, lastSet = 0) => ({ hits: [], speedOk: state === 'maintain', state, lastSet });
 
 // 最长连续同技能游程
 function maxRun(seq) {
