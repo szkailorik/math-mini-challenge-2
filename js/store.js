@@ -47,6 +47,10 @@ export function saveStamps(stamps) { write('stamps', stamps); }
 export function loadMastery(studentId) { return read(`mastery_${studentId}`, {}) || {}; }
 export function saveMastery(studentId, mastery) { write(`mastery_${studentId}`, mastery); }
 
+// 口算计时页上一次成绩（每学员一份 { set, seconds, correct, total }，模式同 mastery）
+export function loadSprintScore(studentId) { return read(`sprint_score_${studentId}`, null); }
+export function saveSprintScore(studentId, score) { write(`sprint_score_${studentId}`, score); }
+
 // 全量导出/导入（换设备迁移用；无需服务器）
 export function exportAll() {
   const dump = { version: APP_VERSION, exportedAt: new Date().toISOString(), state: loadState() };
