@@ -75,13 +75,20 @@ export function getAttackState(studentId) {
     ? [...new Set(raw.graduated.filter((k) => TOPIC_BY_KEY[k]))]
     : [];
   let topicKey = TOPIC_BY_KEY[raw.topicKey] ? raw.topicKey : pickAttackTopic(graduated);
+  // 自愈：主攻位若已在 graduated 中（merge 平局/陈旧态），自动推进到队列中第一个未毕业主题。
+  if (graduated.includes(topicKey)) topicKey = pickAttackTopic(graduated);
   const streakDays = Number.isInteger(raw.streakDays) && raw.streakDays >= 0 ? raw.streakDays : 0;
-  return { topicKey, streakDays, graduated };
+  const lastGradedSet = Number.isInteger(raw.lastGradedSet) ? raw.lastGradedSet : null;
+  return { topicKey, streakDays, graduated, lastGradedSet };
 }
 
 // 批阅后调用：更新 streakDays；连续 2 日 3/3 → graduated.push + 换下一主题。
+// 同一 setNumber 重复批阅（误点重交）不重复计入：以 lastGradedSet 去重，直接返回当前状态。
 export function recordOnePageOutcome(studentId, setNumber, { attackCorrect, attackTotal } = {}) {
   const state = getAttackState(studentId);
+  if (Number.isInteger(state.lastGradedSet) && setNumber <= state.lastGradedSet) {
+    return { graduatedNow: null, newAttack: state.topicKey };
+  }
   const full = attackTotal > 0 && attackCorrect === attackTotal;
   let streakDays = full ? state.streakDays + 1 : 0;
   const graduated = [...state.graduated];
@@ -93,7 +100,7 @@ export function recordOnePageOutcome(studentId, setNumber, { attackCorrect, atta
     streakDays = 0;
     topicKey = pickAttackTopic(graduated);
   }
-  saveAttack(studentId, { topicKey, streakDays, graduated });
+  saveAttack(studentId, { topicKey, streakDays, graduated, lastGradedSet: setNumber });
   return { graduatedNow, newAttack: topicKey };
 }
 
@@ -104,12 +111,16 @@ export function mergeAttack(local = {}, remote = {}) {
   const graduated = [...new Set([...lg, ...rg])].filter((k) => TOPIC_BY_KEY[k]).sort();
   const pick = rg.length > lg.length ? remote : local; // 平局取 local
   const other = pick === local ? remote : local;
+  const llg = Number.isInteger(local.lastGradedSet) ? local.lastGradedSet : null;
+  const rlg = Number.isInteger(remote.lastGradedSet) ? remote.lastGradedSet : null;
+  const lastGradedSet = llg === null && rlg === null ? null : Math.max(llg ?? -Infinity, rlg ?? -Infinity);
   return {
     topicKey: TOPIC_BY_KEY[pick.topicKey] ? pick.topicKey
       : (TOPIC_BY_KEY[other.topicKey] ? other.topicKey : pickAttackTopic(graduated)),
     streakDays: Number.isInteger(pick.streakDays) && pick.streakDays >= 0 ? pick.streakDays
       : (Number.isInteger(other.streakDays) && other.streakDays >= 0 ? other.streakDays : 0),
     graduated,
+    lastGradedSet,
   };
 }
 

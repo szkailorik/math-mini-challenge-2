@@ -105,6 +105,36 @@ console.log('recordOnePageOutcome：毕业/清零规则');
   ok(getAttackState('kai').streakDays === 0 && r.graduatedNow === null, '错一题 streak 清零，不毕业');
 }
 
+// ---- recordOnePageOutcome 批阅日去重（同 set 重复批阅不重复计入）----
+console.log('recordOnePageOutcome：同 set 重复批阅去重，不重复计入 streak');
+{
+  reset();
+  // a) 同一 set 两次 3/3 只算 1 天，不毕业
+  let r1 = recordOnePageOutcome('kai', 1, { attackCorrect: 3, attackTotal: 3 });
+  ok(r1.graduatedNow === null && getAttackState('kai').streakDays === 1, '第一次批阅 set1 3/3 → streak=1');
+  let r2 = recordOnePageOutcome('kai', 1, { attackCorrect: 3, attackTotal: 3 }); // 误点重交，同一 set
+  ok(r2.graduatedNow === null && getAttackState('kai').streakDays === 1, '重复批阅同一 set1 → streak 仍为 1（不重复累加）');
+  r2 = recordOnePageOutcome('kai', 1, { attackCorrect: 0, attackTotal: 3 }); // 即便重交传入错误结果，也应被去重忽略
+  ok(getAttackState('kai').streakDays === 1, '重复批阅同一 set1（即便结果不同）→ streak 仍为 1，不被污染');
+  let r3 = recordOnePageOutcome('kai', 1, { attackCorrect: 3, attackTotal: 3 }); // 再来一次同 set，仍不应推进到毕业
+  ok(r3.graduatedNow === null && getAttackState('kai').streakDays === 1, '第三次重复批阅同一 set1 → 仍不毕业');
+
+  // b) 不同 set 两次 3/3 才真正毕业
+  let r4 = recordOnePageOutcome('kai', 2, { attackCorrect: 3, attackTotal: 3 });
+  ok(r4.graduatedNow === 'smart' && r4.newAttack === 'mixed', '不同 set(2) 再 3/3 → 连续 2 天达成，毕业 smart');
+  ok(getAttackState('kai').graduated.includes('smart') && getAttackState('kai').streakDays === 0, '毕业后 graduated 含 smart，streak 清零');
+}
+
+// ---- getAttackState 自愈：topicKey 落在 graduated 中时自动推进 ----
+console.log('getAttackState：topicKey∈graduated 的存量数据自愈推进');
+{
+  reset();
+  saveAttack('kai', { topicKey: 'smart', streakDays: 1, graduated: ['smart', 'mixed'] });
+  const healed = getAttackState('kai');
+  ok(healed.topicKey === 'mixfd', `自愈推进到队列中首个未毕业主题 mixfd：实际 ${healed.topicKey}`);
+  ok(!healed.graduated.includes(healed.topicKey), '自愈后 topicKey 不在 graduated 中');
+}
+
 // ---- mergeAttack 并集/对称/幂等 ----
 console.log('mergeAttack：并集/对称/幂等');
 {
@@ -122,6 +152,14 @@ console.log('mergeAttack：并集/对称/幂等');
   // 幂等
   const idem = mergeAttack(b, b);
   ok(JSON.stringify(idem) === JSON.stringify(mergeAttack(idem, idem)), '幂等：merge(x,x) 稳定');
+  // lastGradedSet 合并取 max
+  const e = { topicKey: 'mixed', streakDays: 1, graduated: ['smart'], lastGradedSet: 3 };
+  const f = { topicKey: 'fracdiv', streakDays: 0, graduated: ['smart'], lastGradedSet: 7 };
+  ok(mergeAttack(e, f).lastGradedSet === 7, 'lastGradedSet 合并取 max(3,7)=7');
+  ok(mergeAttack(f, e).lastGradedSet === 7, 'lastGradedSet 合并取 max 与顺序无关');
+  const g = { topicKey: 'mixed', streakDays: 1, graduated: ['smart'] }; // 无 lastGradedSet
+  ok(mergeAttack(g, f).lastGradedSet === 7, '一方缺失 lastGradedSet 时取有值的一方');
+  ok(mergeAttack(g, g).lastGradedSet === null, '双方均缺失 lastGradedSet → null');
 }
 
 // ---- streak 计算（连续/断档，同日多条算一天） ----
