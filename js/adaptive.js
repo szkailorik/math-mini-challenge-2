@@ -5,6 +5,7 @@ import { loadProfile, loadStamps, saveStamps } from './store.js';
 import { getErrorEntries } from './errorbook.js';
 import { makeRng, fnv1a } from './rng.js';
 import { computeSprintSkills } from './engine/composer.js';
+import { selectOnePagePlan } from './engine/onepage.js';
 
 // ============ 错题压力（决定当日回炉量） ============
 export function errorPressure(studentId, currentSet) {
@@ -148,6 +149,7 @@ export function ensureStamp(studentId, setNumber) {
       levels: resolveLevels(studentId, setNumber),
       focus: pickFocusEntries(studentId, setNumber),
       sprint: { skills: computeSprintSkills(studentId, setNumber) },
+      onepage: selectOnePagePlan(studentId, setNumber),
       at: new Date().toISOString(),
     };
     // 裁剪窗口外的旧盖章

@@ -49,7 +49,21 @@ export function saveMastery(studentId, mastery) { write(`mastery_${studentId}`, 
 
 // 口算计时页上一次成绩（每学员一份 { set, seconds, correct, total }，模式同 mastery）
 export function loadSprintScore(studentId) { return read(`sprint_score_${studentId}`, null); }
-export function saveSprintScore(studentId, score) { write(`sprint_score_${studentId}`, score); }
+// 口算最佳纪录（正反馈"和自己比"）：correct≥38 且更快 → 更新 { seconds, correct }
+export function loadSprintBest(studentId) { return read(`sprint_best_${studentId}`, null); }
+export function saveSprintScore(studentId, score) {
+  write(`sprint_score_${studentId}`, score);
+  if (score && score.correct >= 38) {
+    const best = loadSprintBest(studentId);
+    if (!best || score.seconds < best.seconds) {
+      write(`sprint_best_${studentId}`, { seconds: score.seconds, correct: score.correct });
+    }
+  }
+}
+
+// 攻坚状态（一页纸主攻队列，{ topicKey, streakDays, graduated:[] }，模式同 mastery）
+export function loadAttack(studentId) { return read(`attack_${studentId}`, null); }
+export function saveAttack(studentId, attack) { write(`attack_${studentId}`, attack); }
 
 // 全量导出/导入（换设备迁移用；无需服务器）
 export function exportAll() {
@@ -58,6 +72,8 @@ export function exportAll() {
     dump[`profile_${id}`] = loadProfile(id);
     dump[`mastery_${id}`] = loadMastery(id);
     dump[`sprint_score_${id}`] = loadSprintScore(id);
+    dump[`sprint_best_${id}`] = loadSprintBest(id);
+    dump[`attack_${id}`] = loadAttack(id);
   }
   return JSON.stringify(dump, null, 2);
 }
@@ -69,6 +85,8 @@ export function importAll(json) {
     if (dump[`profile_${id}`]) write(`profile_${id}`, dump[`profile_${id}`]);
     if (dump[`mastery_${id}`]) write(`mastery_${id}`, dump[`mastery_${id}`]);
     if (dump[`sprint_score_${id}`]) write(`sprint_score_${id}`, dump[`sprint_score_${id}`]);
+    if (dump[`sprint_best_${id}`]) write(`sprint_best_${id}`, dump[`sprint_best_${id}`]);
+    if (dump[`attack_${id}`]) write(`attack_${id}`, dump[`attack_${id}`]);
   }
   if (dump.state) write('state', dump.state);
 }

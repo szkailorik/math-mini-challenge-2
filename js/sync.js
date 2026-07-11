@@ -2,8 +2,11 @@
 // 与旧系统 GistSync 不同：不做"以谁为准"的冲突对比，而是逐字段合并——
 // 错题本按题目指纹索引、计数只增不减、历史按套号追加，天然可合并。
 import { STUDENT_IDS, STORE_PREFIX } from './config.js';
-import { loadProfile, saveProfile, loadState, saveState, loadStamps, saveStamps, loadMastery, saveMastery } from './store.js';
+import { loadProfile, saveProfile, loadState, saveState, loadStamps, saveStamps, loadMastery, saveMastery, loadAttack, saveAttack } from './store.js';
 import { migrateDump } from './migrate.js';
+import { mergeAttack } from './engine/onepage.js';
+
+export { mergeAttack };
 
 const GIST_FILE = 'mmc2-data.json';
 const GIST_DESC = 'math-mini-challenge-2 训练数据（自动同步，勿手动编辑）';
@@ -76,6 +79,7 @@ function buildDump() {
   for (const id of STUDENT_IDS) {
     dump[`profile_${id}`] = loadProfile(id);
     dump[`mastery_${id}`] = loadMastery(id);
+    dump[`attack_${id}`] = loadAttack(id);
   }
   return dump;
 }
@@ -122,6 +126,7 @@ function applyMerged(remoteDump) {
       saveProfile(id, merged);
     }
     saveMastery(id, mergeMastery(loadMastery(id), remoteDump[`mastery_${id}`] || {}));
+    if (remoteDump[`attack_${id}`]) saveAttack(id, mergeAttack(loadAttack(id) || {}, remoteDump[`attack_${id}`]));
   }
   const state = loadState();
   if (remoteDump.state?.currentSet > state.currentSet) {
