@@ -184,6 +184,11 @@ function prepareSprintSubmission() {
     secInput?.focus();
     return null;
   }
+  if (seconds > 1800) {
+    alert('用时秒数看起来不对，请检查');
+    secInput?.focus();
+    return null;
+  }
   const pending = pendingSprint[gradingStudent];
   const wrongCount = Object.values(pending.wrong || {}).filter(Boolean).length;
   const autoCorrect = 40 - wrongCount;
@@ -251,7 +256,9 @@ function submitOnePageGrades() {
   });
 
   // 攻坚状态：主攻位 3 题批阅结果 → 连续 2 批阅日全对则毕业换主攻
-  const outcome = recordOnePageOutcome(gradingStudent, state.currentSet, { attackCorrect, attackTotal });
+  // attackTotal 固定传 3（而非渲染计数 attackTotal）：生成器偶发凑不满 3 题时，
+  // 短卷 2/2 不应被判定为满分毕业条件——此处为毕业判定的 fail-safe。
+  const outcome = recordOnePageOutcome(gradingStudent, state.currentSet, { attackCorrect, attackTotal: 3 });
 
   const themeWrongCount = Object.values(wrong).filter(Boolean).length;
   let msg = `${STUDENTS[gradingStudent].name} 第 ${state.currentSet} 套一页纸已录入：`

@@ -85,45 +85,6 @@ export function renderPaperSheets(paper) {
   return pages.join('');
 }
 
-// ================= 口算计时页（日课模式 · 40 题四列网格） =================
-
-export function renderSprintSheet(paper, sprint) {
-  const items = sprint.items.map((it, i) => `
-    <div class="sprint-item">
-      <span class="sp-no">${i + 1}</span>
-      <span class="sp-prompt">${it.prompt}</span>
-      <span class="sp-blank"></span>
-    </div>`).join('');
-  const lastScoreBox = sprint.lastScore
-    ? `<div class="sprint-last">上次 ${sprint.lastScore.seconds} 秒 · 对 ${sprint.lastScore.correct}/${sprint.lastScore.total}</div>`
-    : `<div class="sprint-last empty">首次挑战</div>`;
-  return `
-  <article class="sheet exam-sheet sprint-sheet" data-student="${paper.studentId}" data-page="sprint">
-    <header class="exam-head sprint-head">
-      <div class="exam-title-row">
-        <div class="exam-badge">${paper.student.name}</div>
-        <div class="exam-title">
-          <h1>口算计时页</h1>
-          <p class="exam-sub">Mental Sprint · 第 ${paper.setNumber} 套 · ${paper.student.label}</p>
-        </div>
-        ${lastScoreBox}
-      </div>
-      <div class="exam-fields sprint-fields">
-        <span>限时 3 分钟</span>
-        <span>开始：<i></i>:<i></i></span>
-        <span>结束：<i></i>:<i></i></span>
-        <span>用时：<i class="wide"></i></span>
-        <span class="score-box">对：<i></i>/40</span>
-      </div>
-    </header>
-    <div class="sprint-grid">${items}</div>
-    <footer class="sheet-foot">
-      <span>math-mini-challenge · 口算地基</span>
-      <span>${paper.student.name} · 第 ${paper.setNumber} 套 · 计时页</span>
-    </footer>
-  </article>`;
-}
-
 export function renderSprintAnswers(sprint) {
   const rows = sprint.items.map((it, i) => `
     <div class="ans-row sprint-ans-row">
