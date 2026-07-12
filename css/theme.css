@@ -358,9 +358,46 @@ body {
 .sync-row input:focus { outline: none; border-color: var(--indigo); }
 #sync-status { margin: 4px 0 0; }
 
-/* ============ 模式切换（日课/拟真） ============ */
-.mode-switch { display: flex; gap: 6px; }
-.mode-btn.on { background: var(--indigo); border-color: var(--indigo); color: #fff; }
+/* ============ 比赛日 / 批阅模式切换 ============ */
+.match-btn { background: #fff7ed; border-color: #f97316; color: #9a3412; }
+.match-btn:hover { border-color: #ea580c; color: #ea580c; }
+.grading-mode-btn.on { background: var(--indigo); border-color: var(--indigo); color: #fff; }
+
+/* ============ 一页纸日课（试卷/答案页） ============ */
+.onepage-head .exam-title-row { align-items: center; }
+.onepage-divider { border: none; border-top: 1.5px dashed var(--line); margin: 10px 0 8px; }
+.onepage-topic { margin-top: 8px; }
+.onepage-topic .sec-head.mini {
+  background: #f3f0e8; border-left: 4px solid var(--indigo);
+  padding: 3px 10px; border-radius: 0 6px 6px 0; margin-bottom: 5px;
+}
+.onepage-topic .sec-head.mini .sec-no { font-size: 12.5px; font-weight: 700; }
+.onepage-q-list { grid-template-columns: 1fr 1fr; gap: 5px 24px; }
+.onepage-q { font-size: 12.5px; }
+.onepage-q .q-body { min-height: 30px; }
+.onepage-feedback {
+  position: static; margin-top: 10px; border-top: 1px solid var(--line);
+  padding-top: 6px; color: var(--ink-soft) !important; display: flex; justify-content: space-between;
+}
+.onepage-feedback span:first-child { font-weight: 600; color: var(--indigo); }
+
+/* —— 答案页：两人合一张，左右分栏 —— */
+.onepage-ans-split { display: flex; gap: 22px; column-count: initial; }
+.onepage-ans-split .onepage-ans-block { flex: 1; min-width: 0; }
+.onepage-ans-name {
+  font-size: 13px; font-weight: 700; color: var(--indigo);
+  margin-bottom: 4px; border-bottom: 1px solid var(--line); padding-bottom: 3px;
+}
+
+/* ============ 批阅页 · 一页纸主题区 ============ */
+.theme-grading h3 { color: var(--indigo); }
+.theme-row { gap: 10px; }
+.theme-toggle {
+  border: 1.4px solid var(--line); border-radius: 7px;
+  background: #fff; width: 34px; height: 30px; font-weight: 700; cursor: pointer;
+  color: var(--green);
+}
+.theme-toggle.wrong { border-color: var(--red); background: #fef2f2; color: var(--red); }
 
 /* ============ 口算计时页（打印/预览） ============ */
 .sprint-head .exam-title-row { align-items: center; }
@@ -381,6 +418,10 @@ body {
 .sp-no { font-weight: 700; color: var(--indigo); min-width: 18px; }
 .sp-prompt { flex: 0 0 auto; white-space: nowrap; }
 .sp-blank { flex: 1; border-bottom: 1px solid var(--ink); min-width: 26px; margin-left: 2px; }
+
+/* 一页纸日课口算区：40 题 4 列，压缩字号/行距，为主题区腾单页空间 */
+.sprint-grid.compact { gap: 3px 12px; margin-top: 8px; }
+.sprint-grid.compact .sprint-item { font-size: 12px; padding: 1.5px 0; }
 
 /* —— 口算区答案（答案批阅页附加） —— */
 .sprint-ans-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0 10px; }
