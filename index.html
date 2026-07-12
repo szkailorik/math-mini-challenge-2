@@ -34,16 +34,14 @@
   <!-- 试卷 -->
   <main id="panel-paper" class="tab-panel on">
     <div class="toolbar">
-      <div class="mode-switch">
-        <button class="tool-btn mode-btn" data-mode="daily">📅 日课模式</button>
-        <button class="tool-btn mode-btn" data-mode="realistic">🎯 拟真模式</button>
-      </div>
-      <button class="tool-btn primary" data-print="print-papers">🖨 打印双人套卷</button>
+      <button class="tool-btn primary" data-print="print-papers">🖨 打印今日日课（两人两张）</button>
       <button class="tool-btn" data-print="print-papers-kai">只印 KAI</button>
       <button class="tool-btn" data-print="print-papers-lorik">只印 Lorik</button>
-      <button class="tool-btn answer" data-print="print-answers">🗝 打印答案批阅页</button>
+      <button class="tool-btn answer" data-print="print-answers">🗝 答案页</button>
+      <span class="spacer"></span>
+      <button class="tool-btn match-btn" data-print="print-match-day">🏆 比赛日</button>
     </div>
-    <p class="note">同一套号永远生成同一份试卷（可随时补打）。换 <b>＋/−</b> 出新一套。屏幕预览即打印效果。<b>日课模式</b>=口算计时页+现有两页+按需回炉页；<b>拟真模式</b>=现有两页+按需回炉页。</p>
+    <p class="note">同一套号永远生成同一份试卷（可随时补打）。换 <b>＋/−</b> 出新一套。屏幕预览即打印效果。<b>一页纸日课</b>=口算冲刺40题+主攻3题+复现A/B各2题+错题二过≤2题（无到期则省略）+必赢收官1题，每人一张 A4，约 20 分钟。<b>🏆 比赛日</b>是动作不是模式：手动打印当前套的完整拟真卷，周末检验用。</p>
     <div id="paper-preview" class="preview"></div>
   </main>
 
@@ -53,6 +51,8 @@
       <button class="student-btn on" data-student="kai">KAI</button>
       <button class="student-btn" data-student="lorik">Lorik</button>
       <span class="spacer"></span>
+      <button class="tool-btn grading-mode-btn on" data-gmode="daily">📅 日课</button>
+      <button class="tool-btn grading-mode-btn" data-gmode="match">🏆 比赛卷</button>
       <button class="tool-btn" id="grade-all-right">重置为全对</button>
       <button class="tool-btn primary" id="grade-submit">提交批阅</button>
     </div>
@@ -121,21 +121,20 @@
   <!-- 家长指引 -->
   <main id="panel-guide" class="tab-panel">
     <div class="guide">
-      <h2>每日 25 分钟闭环（家长流程）</h2>
+      <h2>每日 20 分钟闭环（一页纸日课）</h2>
       <ol>
-        <li><b>打印</b>：「试卷」页 → 打印双人四页（每人 2 页 A4）。</li>
-        <li><b>限时训练</b>：第 1 页大题一限时 3 分钟；整卷建议 40 分钟内完成，营造考试感。</li>
-        <li><b>纸上批阅</b>：打印「答案批阅页」，逐题勾 ✓对 / △粗心 / ✗错 / ？需讲解。答案旁的一句提示就是给你的检查口令。</li>
-        <li><b>系统录入</b>：「批阅」页默认全对，只点非✓的题，提交后错题自动进错题本。</li>
-        <li><b>错题闭环（自动）</b>：有到期错题时，试卷自动多出一页「七、错题回炉」（原题回炉 + 同类变式，不计分），批阅时一并录入即可——不用再单独打复练卷。错题较多时也可以在「错题本」页手动打专项复练卷。</li>
-        <li><b>周末讲解</b>：打印「讲解清单」，只讲复错和标记需讲解的题：先让孩子说思路 → 指出关键一步 → 当场做变式确认。</li>
+        <li><b>打印</b>：「试卷」页 →「🖨 打印今日日课」，每人一张 A4：① 口算冲刺 40 题（3 分钟）② 主攻难点 3 题 ③ 复现主题 A/B 各 2 题 ④ 错题二过 ≤2 题（无到期错题时这段自动不出现）⑤ 必赢收官 1 题。</li>
+        <li><b>限时训练</b>：口算区限时 3 分钟；全卷约 20 分钟内完成。</li>
+        <li><b>纸上批阅</b>：打印「🗝 答案页」（两人合一张），逐题勾 ✓对 / ✗错。</li>
+        <li><b>系统录入（30 秒）</b>：「批阅」页默认停在「📅 日课」，默认全对，只点标错的题即可提交——口算自动记录纪录，主攻/复现题进错题本，错题二过题回写掌握状态。</li>
+        <li><b>周六比赛日</b>：「试卷」页点「🏆 比赛日」（会有确认提示），为两人打印一次完整拟真卷 + 答案，检验综合水平；批阅时把「批阅」页顶部切到「🏆 比赛卷」再录入，其余照常。</li>
       </ol>
-      <h2>本阶段训练重点（为什么这样出卷）</h2>
-      <p>乘法、除法、分数运算（旧卷大题一、二、五）已经熟练，继续大量刷会浪费时间——它们降级为「核心保温」每天只抽检 6 题防回退。主训练火力转向四个真正决定初中衔接的能力：<b>复杂四则混合</b>（占 25 分的主战场：先看结构选方法）、<b>表征互通</b>（分数↔小数↔百分数↔比自由切换）、<b>单位率关系</b>（量纲统一与建模）、<b>方程与简算策略</b>（未知数位置与结构眼）。</p>
+      <h2>三个正反馈开关</h2>
+      <p><b>和自己比</b>：页眉显示口算「上次成绩」与「最佳纪录」，页脚也报最佳秒数——每天比昨天的自己快一点。<b>看得见的毕业</b>：主攻位连续 2 个批阅日 3 题全对即「毕业」拿一枚掌握章，下一个难点自动顶上；仪表盘可看累计枚数。<b>以胜利收尾</b>：最后一题永远是已掌握内容里挑的「必赢题」，保证每天用一次成功收尾。红线：永不因为做错而多留题——错了，明天仍是 3 题主攻，不加量。</p>
+      <h2>本阶段训练重点（为什么主攻队列这样排）</h2>
+      <p>主攻队列按失分率从高到低排：<b>简便运算</b> → <b>复杂四则混合</b> → <b>分数小数混合</b> → <b>分数除法/两步</b> → <b>多位笔算（小数乘除）</b> → <b>方程</b> → <b>单位率</b>。同一时刻只有一个主攻位，练透一个再轮下一个；已毕业的主题仍会按轮转出现在「复现」位防回退，队列走完从头再轮一遍保温强度。</p>
       <h2>难度会自己调整</h2>
-      <p>每个训练域有独立的动态难度（仪表盘 L 值）：近 3 套正确率 ≥92% 自动升一小档，&lt;75% 自动降一档，75~92% 持平。复杂混合与方程简算最高可升到 L4（衔接初中的巅峰难度）。到期错题多时试卷自动进入「强化回收」，回炉页加长；错题清零后回到轻量档。<b>你不需要手动调难度，只要如实批阅。</b></p>
-      <h2>晋级判定</h2>
-      <p>「仪表盘」显示两人各训练域的近期正确率。达到：完成 ≥10 套、复杂混合正确率 ≥90%、无到期错题 —— 即可进入下一阶段（初中预备）。</p>
+      <p>每个训练域有独立的动态难度：近 3 套正确率 ≥92% 自动升一档，&lt;75% 自动降一档。到期错题会自动排进「错题二过」，最多 2 题，绝不因为错得多而加题——错题清零后这段自动消失。<b>你不需要手动调难度，只要如实批阅。</b></p>
     </div>
   </main>
 </div>
